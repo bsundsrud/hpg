@@ -1,16 +1,17 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     fmt::Display,
+    sync::{Arc, Mutex},
 };
 
-use anyhow::Result;
 use petgraph::prelude::*;
-use rlua::{self, Lua};
+use rlua::{self, Function, Lua, Table};
 use structopt::StructOpt;
 use thiserror::Error;
 
+pub type Result<T, E = TaskError> = std::result::Result<T, E>;
 pub type TaskIdx = NodeIndex<u32>;
-pub type TaskGraph = DiGraph<TaskDefinition, (), u32>;
+pub type TaskGraph<'lua> = DiGraph<TaskDefinition<'lua>, (), u32>;
 
 #[derive(Debug, Error)]
 pub enum TaskError {
@@ -18,6 +19,8 @@ pub enum TaskError {
     CycleError(TaskRef),
     #[error("Unknown task {0}")]
     UnknownTask(TaskRef),
+    #[error("Lua Error: {0}")]
+    LuaError(#[from] rlua::Error),
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -48,27 +51,29 @@ impl Display for TaskRef {
 }
 
 #[derive(Debug)]
-pub struct TaskDefinition {
+pub struct TaskDefinition<'lua> {
     name: TaskRef,
     dependencies: Vec<TaskRef>,
+    f: Function<'lua>,
 }
 
-impl TaskDefinition {
-    pub fn new<S: Into<TaskRef>>(name: S, dependencies: Vec<S>) -> Self {
+impl<'lua> TaskDefinition<'lua> {
+    pub fn new<S: Into<TaskRef>>(name: S, dependencies: Vec<S>, f: Function<'lua>) -> Self {
         Self {
             name: name.into(),
             dependencies: dependencies.into_iter().map(|s| s.into()).collect(),
+            f,
         }
     }
 }
 
-pub struct TaskGraphState {
-    dag: TaskGraph,
+pub struct TaskGraphState<'lua> {
+    dag: TaskGraph<'lua>,
     ref_to_nodes: HashMap<TaskRef, TaskIdx>,
 }
 
-impl TaskGraphState {
-    pub fn from_tasks(tasks: Vec<TaskDefinition>) -> Result<Self> {
+impl<'lua> TaskGraphState<'lua> {
+    pub fn from_tasks(tasks: Vec<TaskDefinition<'lua>>) -> Result<Self> {
         let mut dag = TaskGraph::new();
         let mut idx_map: HashMap<TaskRef, TaskIdx> = HashMap::new();
 
@@ -114,7 +119,7 @@ impl TaskGraphState {
         res
     }
 
-    pub fn execution_for_task(&self, task: &TaskRef) -> Result<Vec<&TaskDefinition>> {
+    pub fn execution_for_task(&self, task: &TaskRef) -> Result<Vec<&TaskDefinition<'lua>>> {
         let start_idx = self
             .ref_to_nodes
             .get(task)
@@ -127,7 +132,7 @@ impl TaskGraphState {
             .collect())
     }
 
-    pub fn execution_for_tasks(&self, tasks: Vec<TaskRef>) -> Result<Vec<&TaskDefinition>> {
+    pub fn execution_for_tasks(&self, tasks: Vec<TaskRef>) -> Result<Vec<&TaskDefinition<'lua>>> {
         let mut uniques = HashSet::new();
 
         let mut execution: Vec<&TaskDefinition> = tasks
@@ -146,18 +151,52 @@ impl TaskGraphState {
     }
 }
 
-fn create_lua() -> Lua {
+fn create_lua(src: &str, requested_tasks: Vec<TaskRef>) -> Result<()> {
     let lua = Lua::new();
-    lua.context(|lua_ctx| {
-        let task_fn = lua_ctx
-            .create_function(
-                |_, (task_name, dependencies, f): (String, Vec<String>, rlua::Function)| Ok(()),
-            )
-            .unwrap();
+    lua.context::<_, Result<()>>(|lua_ctx| {
         let globals = lua_ctx.globals();
-        globals.set("task", task_fn).unwrap();
-    });
-    lua
+        let task_table = lua_ctx.create_table()?;
+        globals.set("_tasks", task_table)?;
+        let task_fn = lua_ctx.create_function_mut(
+            |ctx, (task_name, dependencies, f): (String, Vec<String>, rlua::Function)| {
+                let table: Table = ctx.globals().get("_tasks")?;
+                let t = ctx.create_table()?;
+                t.set("deps", dependencies)?;
+                t.set("f", f)?;
+                table.set(task_name, t)?;
+                ctx.globals().set("_tasks", table)?;
+                Ok(())
+            },
+        )?;
+        // inject rust functions
+        globals.set("task", task_fn)?;
+
+        // eval root script
+
+        lua_ctx.load(&src).exec()?;
+
+        // Extract task data
+
+        let task_table: Table = globals.get("_tasks")?;
+        let mut tasks = Vec::new();
+        for pair in task_table.pairs::<String, Table>() {
+            let (task_name, data) = pair?;
+            let deps = data.get("deps")?;
+            let f = data.get("f")?;
+            tasks.push(TaskDefinition::new(task_name, deps, f));
+        }
+
+        let task_state = TaskGraphState::from_tasks(tasks)?;
+        let execution_ordering = task_state.execution_for_tasks(requested_tasks)?;
+
+        // Execute
+        for task in execution_ordering {
+            println!("--- Executing {}", &task.name);
+            task.f.call(())?;
+        }
+        Ok(())
+    })?;
+    Ok(())
 }
 
 #[derive(Debug, StructOpt)]
@@ -170,23 +209,41 @@ struct Opt {
 fn main() -> Result<()> {
     let opt = Opt::from_args();
 
-    let tasks = vec![
-        TaskDefinition::new("A", Vec::new()),
-        TaskDefinition::new("B", vec!["A", "F"]),
-        TaskDefinition::new("C", vec!["A"]),
-        TaskDefinition::new("D", vec!["B"]),
-        TaskDefinition::new("E", vec!["D", "C"]),
-        TaskDefinition::new("F", vec![]),
-        TaskDefinition::new("G", vec![]),
-        TaskDefinition::new("H", vec!["G"]),
-    ];
+    // let tasks = vec![
+    //     TaskDefinition::new("A", Vec::new()),
+    //     TaskDefinition::new("B", vec!["A", "F"]),
+    //     TaskDefinition::new("C", vec!["A"]),
+    //     TaskDefinition::new("D", vec!["B"]),
+    //     TaskDefinition::new("E", vec!["D", "C"]),
+    //     TaskDefinition::new("F", vec![]),
+    //     TaskDefinition::new("G", vec![]),
+    //     TaskDefinition::new("H", vec!["G"]),
+    // ];
 
-    let state = TaskGraphState::from_tasks(tasks)?;
+    // let state = TaskGraphState::from_tasks(tasks)?;
 
     let task_refs = opt.targets.into_iter().map(TaskRef::new).collect();
-    let ordering = state.execution_for_tasks(task_refs)?;
-    for task in ordering {
-        println!("{}", task.name);
-    }
+    let lua_code = r#"
+task("foo", {}, function ()
+  print "from foo"
+end)
+
+task("bar", {"foo"}, function()
+  print "from bar"
+end)
+
+task("baz", {"foo"}, function()
+  print "from baz"
+end)
+
+task("quux", {"bar", "baz"}, function()
+  print "from quux"
+end)
+"#;
+    create_lua(lua_code.into(), task_refs)?;
+    // let ordering = state.execution_for_tasks(task_refs)?;
+    // for task in ordering {
+    //     println!("{}", task.name);
+    // }
     Ok(())
 }
