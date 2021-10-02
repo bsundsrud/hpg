@@ -156,15 +156,15 @@ fn create_lua(src: &str, requested_tasks: Vec<TaskRef>) -> Result<()> {
     lua.context::<_, Result<()>>(|lua_ctx| {
         let globals = lua_ctx.globals();
         let task_table = lua_ctx.create_table()?;
-        globals.set("_tasks", task_table)?;
+        lua_ctx.set_named_registry_value("tasks", task_table)?;
         let task_fn = lua_ctx.create_function_mut(
             |ctx, (task_name, dependencies, f): (String, Vec<String>, rlua::Function)| {
-                let table: Table = ctx.globals().get("_tasks")?;
+                let table: Table = ctx.named_registry_value("tasks")?;
                 let t = ctx.create_table()?;
                 t.set("deps", dependencies)?;
                 t.set("f", f)?;
                 table.set(task_name, t)?;
-                ctx.globals().set("_tasks", table)?;
+                ctx.set_named_registry_value("tasks", table)?;
                 Ok(())
             },
         )?;
@@ -177,7 +177,7 @@ fn create_lua(src: &str, requested_tasks: Vec<TaskRef>) -> Result<()> {
 
         // Extract task data
 
-        let task_table: Table = globals.get("_tasks")?;
+        let task_table: Table = lua_ctx.named_registry_value("tasks")?;
         let mut tasks = Vec::new();
         for pair in task_table.pairs::<String, Table>() {
             let (task_name, data) = pair?;
