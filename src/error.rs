@@ -10,6 +10,10 @@ pub enum TaskError {
     UnknownTask(TaskRef),
     #[error("Lua Error: {0}")]
     LuaError(#[from] rlua::Error),
+    #[error("IO Error: {0}")]
+    IoError(#[from] std::io::Error),
+    #[error("Action Failed: {0}")]
+    ActionError(String),
 }
 
 #[derive(Debug, Error)]

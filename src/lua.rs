@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use crate::{
     error::TaskError,
     tasks::{TaskDefinition, TaskGraphState, TaskRef},
-    Result,
+    Result, WRITER,
 };
 use rlua::{Function, Lua, Table};
 
@@ -91,10 +91,23 @@ impl EvaluatedLuaState {
         self.lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
             let task_table: Table = lua_ctx.named_registry_value("tasks")?;
             let ordering = self.execution_ordering(tasks)?;
+            let _guard = WRITER.enter("tasks");
             for task in ordering {
-                println!("--- Executing {}", &task.name());
+                WRITER.write(format!("task [ {} ]:", task.name().as_ref()));
+                let _guard = WRITER.enter(task.name().as_ref());
                 let f: Function = task_table.get(task.name().as_ref())?;
-                f.call(())?;
+                match f.call(()) {
+                    Ok(()) => {}
+                    Err(rlua::Error::CallbackError { traceback, cause }) => {
+                        if let rlua::Error::ExternalError(ref e) = *cause.clone() {
+                            WRITER.write(format!("{}\n{}", e, traceback));
+                        } else {
+                            WRITER.write(format!("{}\n{}", cause, traceback));
+                        }
+                        break;
+                    }
+                    e @ _ => e?,
+                }
             }
             Ok(())
         })?;

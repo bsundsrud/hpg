@@ -1,5 +1,7 @@
 use error::HpgError;
+use lazy_static::lazy_static;
 use lua::LuaState;
+use output::StructuredWriter;
 use std::fs::File;
 use structopt::StructOpt;
 use tasks::TaskRef;
@@ -7,11 +9,18 @@ use tasks::TaskRef;
 mod actions;
 mod error;
 mod lua;
+mod output;
 mod tasks;
 
 pub type Result<T, E = HpgError> = core::result::Result<T, E>;
 use std::io::prelude::*;
 use std::io::BufReader;
+
+use crate::output::Target;
+
+lazy_static! {
+    pub static ref WRITER: StructuredWriter = StructuredWriter::new(Target::Stdout);
+}
 
 fn load_file(fname: &str) -> Result<String, HpgError> {
     let f = File::open(fname)?;
@@ -37,6 +46,9 @@ fn main() -> Result<()> {
 
     let lua = LuaState::new()?;
     lua.register_fn(actions::echo)?;
+    lua.register_fn(actions::fail)?;
+    lua.register_fn(actions::exec)?;
+
     let lua = lua.eval(&code)?;
     lua.execute(&task_refs)?;
 
