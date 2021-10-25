@@ -48,6 +48,7 @@ fn main() -> Result<()> {
     lua.register_fn(actions::echo)?;
     lua.register_fn(actions::fail)?;
     lua.register_fn(actions::exec)?;
+    lua.register_fn(actions::shell)?;
 
     let lua = lua.eval(&code)?;
     lua.execute(&task_refs)?;
