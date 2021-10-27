@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::{error::TaskError, Result, WRITER};
 mod copy;
+pub mod packages;
 mod process;
 mod util;
 pub use copy::copy;

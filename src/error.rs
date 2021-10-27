@@ -1,6 +1,5 @@
-use thiserror::Error;
-
 use crate::tasks::TaskRef;
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum TaskError {

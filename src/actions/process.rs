@@ -13,7 +13,7 @@ use crate::WRITER;
 use crate::{actions::util::action_error, error::TaskError};
 use std::os::unix::process::ExitStatusExt;
 
-fn exit_status(e: &ExitStatus) -> i32 {
+pub fn exit_status(e: &ExitStatus) -> i32 {
     match e.code() {
         Some(c) => c,
         None => 127 + e.signal().unwrap_or(0),
