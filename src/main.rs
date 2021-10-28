@@ -50,6 +50,7 @@ fn main() -> Result<()> {
     lua.register_fn(actions::exec)?;
     lua.register_fn(actions::shell)?;
     lua.register_fn(actions::copy)?;
+    lua.register_fn(actions::package)?;
     let lua = lua.eval(&code)?;
     lua.execute(&task_refs)?;
 

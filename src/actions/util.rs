@@ -9,6 +9,10 @@ pub(crate) fn action_error<S: Into<String>>(msg: S) -> rlua::Error {
     rlua::Error::ExternalError(Arc::new(TaskError::ActionError(msg.into())))
 }
 
+pub(crate) fn task_error(err: TaskError) -> rlua::Error {
+    rlua::Error::ExternalError(Arc::new(err))
+}
+
 pub(crate) fn io_error(e: std::io::Error) -> rlua::Error {
     rlua::Error::ExternalError(Arc::new(TaskError::IoError(e)))
 }

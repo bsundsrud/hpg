@@ -55,10 +55,11 @@ impl PackageManager for PacmanManager {
     }
 
     fn package_status(&self, name: &str) -> Result<super::PackageStatus, TaskError> {
-        let output = self.call_pacman(&["-D", name])?;
+        let output = self.call_pacman(&["-Q", name])?;
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let (package, version) = stdout
+                .trim()
                 .rsplit_once(" ")
                 .ok_or_else(|| TaskError::ActionError(format!("Couldn't get package status")))?;
             WRITER.write(format!("package status: {} {} installed", package, version));
@@ -79,18 +80,39 @@ impl PackageManager for PacmanManager {
         &self,
         packages: &[super::InstallRequest],
     ) -> Result<Vec<super::PackageStatus>, TaskError> {
-        let requests: Vec<String> = packages
-            .iter()
-            .map(|r| {
-                if let Some(v) = &r.version {
-                    format!("{}={}", r.name, v.0)
-                } else {
-                    r.name.clone()
-                }
-            })
-            .collect();
         WRITER.write("install packages:");
         let _g = WRITER.enter("package_install");
+        let mut requests: Vec<String> = Vec::new();
+        for package in packages {
+            let p = self.package_status(&package.name)?;
+            if let InstallStatus::Installed(Version(installed_v)) = p.status {
+                if let Some(Version(requested_v)) = &package.version {
+                    if *requested_v != installed_v {
+                        requests.push(format!("{}={}", package.name, requested_v));
+                    } else {
+                        WRITER.write(format!(
+                            "{} {}: already installed, skipping...",
+                            package.name, installed_v
+                        ));
+                    }
+                } else {
+                    WRITER.write(format!(
+                        "{} {}: already installed, skipping...",
+                        package.name, installed_v
+                    ));
+                }
+            } else {
+                if let Some(Version(requested_v)) = &package.version {
+                    requests.push(format!("{}={}", package.name, requested_v));
+                } else {
+                    requests.push(package.name.clone());
+                }
+            }
+        }
+        if requests.is_empty() {
+            WRITER.write("No packages to install.");
+            return Ok(Vec::new());
+        }
         let output =
             self.call_pacman(&["-S", "--noconfirm", "--noprogressbar", &requests.join(" ")])?;
 
@@ -131,7 +153,9 @@ impl PackageManager for PacmanManager {
     }
 
     fn remove_packages(&self, packages: &[&str]) -> Result<Vec<super::PackageStatus>, TaskError> {
-        let output = self.call_pacman(&["-R", &packages.join(" ")])?;
+        let packages: Vec<&str> = packages.into_iter().map(|p| p.as_ref()).collect();
+        let output =
+            self.call_pacman(&["-R", "--noconfirm", "--noprogressbar", &packages.join(" ")])?;
         WRITER.write("remove packages:");
         let _g = WRITER.enter("package_remove");
         if output.stdout.len() > 0 {

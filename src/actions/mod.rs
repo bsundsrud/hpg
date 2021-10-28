@@ -2,10 +2,11 @@ use std::sync::Arc;
 
 use crate::{error::TaskError, Result, WRITER};
 mod copy;
-pub mod packages;
+mod packages;
 mod process;
 mod util;
 pub use copy::copy;
+pub use packages::package;
 pub use process::{exec, shell};
 use rlua::Lua;
 
