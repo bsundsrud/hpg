@@ -8,9 +8,7 @@ use std::{
 use rlua::{Lua, Table};
 
 use crate::{
-    actions::util::{
-        action_error, gid_for_value, io_error, lua_table_to_json, read_file, uid_for_value,
-    },
+    actions::util::{action_error, io_error, lua_table_to_json, read_file, run_chown},
     error::TaskError,
     Result, WRITER,
 };
@@ -88,32 +86,9 @@ pub fn copy(lua: &Lua) -> Result<()> {
                         .map_err(io_error)?;
                     WRITER.write(format!("mode: {:o}", mode));
                 }
-                match (user, group) {
-                    (None, None) => {}
-                    (None, Some(g)) => {
-                        let gid = gid_for_value(&g)?;
-                        nix::unistd::chown(dst.as_path(), None, Some(gid))
-                            .map_err(|e| action_error(format!("chown: {}", e)))?;
-                        WRITER.write(format!("gid: {}", gid));
-                    }
-                    (Some(u), None) => {
-                        let uid = uid_for_value(&u)?;
-                        nix::unistd::chown(dst.as_path(), Some(uid), None)
-                            .map_err(|e| action_error(format!("chown: {}", e)))?;
-                        WRITER.write(format!("uid: {}", uid));
-                    }
-                    (Some(u), Some(g)) => {
-                        let uid = uid_for_value(&u)?;
-                        let gid = gid_for_value(&g)?;
-                        nix::unistd::chown(dst.as_path(), Some(uid), Some(gid))
-                            .map_err(|e| action_error(format!("chown: {}", e)))?;
-                        WRITER.write(format!("uid: {}", uid));
-                        WRITER.write(format!("gid: {}", gid));
-                    }
-                }
+                run_chown(&dst, user, group)?;
 
                 let retval = ctx.create_table()?;
-
                 Ok(retval)
             },
         )?;

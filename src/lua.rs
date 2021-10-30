@@ -1,8 +1,11 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     error::TaskError,
-    tasks::{TaskDefinition, TaskGraphState, TaskRef},
+    tasks::{TaskDefinition, TaskGraphState, TaskRef, TaskResult},
     Result, WRITER,
 };
 use rlua::{Function, Lua, Table};
@@ -92,12 +95,42 @@ impl EvaluatedLuaState {
             let task_table: Table = lua_ctx.named_registry_value("tasks")?;
             let ordering = self.execution_ordering(tasks)?;
             let _guard = WRITER.enter("tasks");
+            let mut results: HashMap<TaskRef, TaskResult> = HashMap::new();
+
             for task in ordering {
                 WRITER.write(format!("task [ {} ]:", task.name().as_ref()));
                 let _guard = WRITER.enter(task.name().as_ref());
+                let mut parent_failed = false;
+
+                for parent in self.graph.direct_parents(&task.name()) {
+                    match results.get(parent).unwrap() {
+                        TaskResult::Success => {}
+                        TaskResult::Incomplete(_) => {
+                            WRITER.write("SKIPPED");
+                            parent_failed = true;
+                            break;
+                        }
+                    }
+                }
+                if parent_failed {
+                    results.insert(task.name().clone(), TaskResult::Incomplete(None));
+                    continue;
+                }
+
                 let f: Function = task_table.get(task.name().as_ref())?;
                 match f.call(()) {
-                    Ok(()) => {}
+                    Ok(rlua::Value::UserData(ud)) => {
+                        if ud.is::<TaskResult>() {
+                            let tr: &TaskResult = &ud.borrow().unwrap();
+                            if let TaskResult::Incomplete(_) = tr {
+                                WRITER.write("TASK INCOMPLETE");
+                            }
+                            results.insert(task.name().clone(), tr.clone());
+                        }
+                    }
+                    Ok(_) => {
+                        results.insert(task.name().clone(), TaskResult::Success);
+                    }
                     Err(rlua::Error::CallbackError { traceback, cause }) => {
                         if let rlua::Error::ExternalError(ref e) = *cause.clone() {
                             WRITER.write(format!("{}\n{}", e, traceback));
@@ -106,7 +139,7 @@ impl EvaluatedLuaState {
                         }
                         break;
                     }
-                    e @ _ => e?,
+                    Err(e) => return Err(e.into()),
                 }
             }
             Ok(())

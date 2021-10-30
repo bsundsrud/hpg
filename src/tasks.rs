@@ -5,8 +5,17 @@ use crate::error::TaskError;
 use crate::Result;
 use petgraph::graph::DiGraph;
 use petgraph::prelude::*;
+use rlua::UserData;
 pub type TaskIdx = NodeIndex<u32>;
 pub type TaskGraph = DiGraph<TaskDefinition, (), u32>;
+
+#[derive(Debug, Clone)]
+pub enum TaskResult {
+    Success,
+    Incomplete(Option<String>),
+}
+
+impl UserData for TaskResult {}
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct TaskRef(String);
@@ -109,6 +118,17 @@ impl TaskGraphState {
         let mut res = Vec::new();
         while let Some(nx) = dfs.next(&self.dag) {
             res.push(nx);
+        }
+        res
+    }
+
+    pub fn direct_parents(&self, task: &TaskRef) -> Vec<&TaskRef> {
+        let mut res = Vec::new();
+        let idx = self.ref_to_nodes.get(&task);
+        if let Some(&idx) = idx {
+            for i in self.dag.neighbors_directed(idx, Direction::Outgoing) {
+                res.push(self.dag.node_weight(i).unwrap().name());
+            }
         }
         res
     }

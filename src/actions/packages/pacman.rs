@@ -29,7 +29,7 @@ impl PacmanManager {
 }
 
 impl PackageManager for PacmanManager {
-    fn update_repos(&self) -> Result<String, TaskError> {
+    fn call_update_repos(&self) -> Result<(), TaskError> {
         WRITER.write("update repos:");
         let _g = WRITER.enter("update_repo");
         let output = self.call_pacman(&["-Syu", "--noconfirm"])?;
@@ -45,7 +45,7 @@ impl PackageManager for PacmanManager {
         }
         WRITER.write(format!("exit code: {}", exit_status(&output.status)));
         if output.status.success() {
-            Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+            Ok(())
         } else {
             Err(TaskError::ActionError(format!(
                 "Failed updating repos: {}",
@@ -76,43 +76,16 @@ impl PackageManager for PacmanManager {
         }
     }
 
-    fn install_packages(
-        &self,
-        packages: &[super::InstallRequest],
-    ) -> Result<Vec<super::PackageStatus>, TaskError> {
-        WRITER.write("install packages:");
-        let _g = WRITER.enter("package_install");
+    fn call_install(&self, packages: &[super::InstallRequest]) -> crate::Result<(), TaskError> {
         let mut requests: Vec<String> = Vec::new();
         for package in packages {
-            let p = self.package_status(&package.name)?;
-            if let InstallStatus::Installed(Version(installed_v)) = p.status {
-                if let Some(Version(requested_v)) = &package.version {
-                    if *requested_v != installed_v {
-                        requests.push(format!("{}={}", package.name, requested_v));
-                    } else {
-                        WRITER.write(format!(
-                            "{} {}: already installed, skipping...",
-                            package.name, installed_v
-                        ));
-                    }
-                } else {
-                    WRITER.write(format!(
-                        "{} {}: already installed, skipping...",
-                        package.name, installed_v
-                    ));
-                }
+            if let Some(Version(requested_v)) = &package.version {
+                requests.push(format!("{}={}", package.name, requested_v));
             } else {
-                if let Some(Version(requested_v)) = &package.version {
-                    requests.push(format!("{}={}", package.name, requested_v));
-                } else {
-                    requests.push(package.name.clone());
-                }
+                requests.push(package.name.clone());
             }
         }
-        if requests.is_empty() {
-            WRITER.write("No packages to install.");
-            return Ok(Vec::new());
-        }
+
         let output =
             self.call_pacman(&["-S", "--noconfirm", "--noprogressbar", &requests.join(" ")])?;
 
@@ -134,26 +107,10 @@ impl PackageManager for PacmanManager {
                 String::from_utf8_lossy(&output.stderr)
             )));
         }
-        let status = packages
-            .iter()
-            .map(|p| self.package_status(&p.name))
-            .collect::<Result<Vec<PackageStatus>, _>>()?;
-        for s in status.iter() {
-            match s.status {
-                InstallStatus::NotFound | InstallStatus::NotInstalled => {
-                    return Err(TaskError::ActionError(format!(
-                        "Failed to install {}",
-                        s.package
-                    )))
-                }
-                _ => {}
-            }
-        }
-        Ok(status)
+        Ok(())
     }
 
-    fn remove_packages(&self, packages: &[&str]) -> Result<Vec<super::PackageStatus>, TaskError> {
-        let packages: Vec<&str> = packages.into_iter().map(|p| p.as_ref()).collect();
+    fn call_remove(&self, packages: &[&str]) -> crate::Result<(), TaskError> {
         let output =
             self.call_pacman(&["-R", "--noconfirm", "--noprogressbar", &packages.join(" ")])?;
         WRITER.write("remove packages:");
@@ -175,21 +132,6 @@ impl PackageManager for PacmanManager {
                 String::from_utf8_lossy(&output.stderr)
             )));
         }
-        let status = packages
-            .iter()
-            .map(|p| self.package_status(p))
-            .collect::<Result<Vec<PackageStatus>, _>>()?;
-        for s in status.iter() {
-            match s.status {
-                InstallStatus::Installed(_) => {
-                    return Err(TaskError::ActionError(format!(
-                        "Failed to remove {}",
-                        s.package
-                    )))
-                }
-                _ => {}
-            }
-        }
-        Ok(status)
+        Ok(())
     }
 }

@@ -1,8 +1,8 @@
+use crate::error::TaskError;
+use crate::WRITER;
 use nix::unistd::{Gid, Group, Uid, User};
 use rlua::Table;
 use serde_json::Map;
-
-use crate::error::TaskError;
 use std::{convert::TryInto, fs::File, io::prelude::*, io::BufReader, path::Path, sync::Arc};
 
 pub(crate) fn action_error<S: Into<String>>(msg: S) -> rlua::Error {
@@ -71,6 +71,37 @@ pub(crate) fn uid_for_value(val: &rlua::Value) -> Result<Uid, rlua::Error> {
             ));
         }
     }
+}
+
+pub(crate) fn run_chown(
+    p: &Path,
+    user: Option<rlua::Value>,
+    group: Option<rlua::Value>,
+) -> Result<(), rlua::Error> {
+    match (user, group) {
+        (None, None) => {}
+        (None, Some(g)) => {
+            let gid = gid_for_value(&g)?;
+            nix::unistd::chown(p, None, Some(gid))
+                .map_err(|e| action_error(format!("chown: {}", e)))?;
+            WRITER.write(format!("gid: {}", gid));
+        }
+        (Some(u), None) => {
+            let uid = uid_for_value(&u)?;
+            nix::unistd::chown(p, Some(uid), None)
+                .map_err(|e| action_error(format!("chown: {}", e)))?;
+            WRITER.write(format!("uid: {}", uid));
+        }
+        (Some(u), Some(g)) => {
+            let uid = uid_for_value(&u)?;
+            let gid = gid_for_value(&g)?;
+            nix::unistd::chown(p, Some(uid), Some(gid))
+                .map_err(|e| action_error(format!("chown: {}", e)))?;
+            WRITER.write(format!("uid: {}", uid));
+            WRITER.write(format!("gid: {}", gid));
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn lua_table_to_json<'lua>(tbl: Table<'lua>) -> Result<serde_json::Value, TaskError> {

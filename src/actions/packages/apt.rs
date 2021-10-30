@@ -45,23 +45,20 @@ impl AptManager {
 }
 
 impl PackageManager for AptManager {
-    fn update_repos(&self) -> std::result::Result<String, TaskError> {
+    fn call_update_repos(&self) -> std::result::Result<(), TaskError> {
         let output = self.call_aptget(&["update"])?;
-        Ok(output)
+        Ok(())
     }
 
     fn package_status(&self, name: &str) -> Result<super::PackageStatus, TaskError> {
         todo!()
     }
 
-    fn install_packages(
-        &self,
-        packages: &[super::InstallRequest],
-    ) -> Result<Vec<super::PackageStatus>, TaskError> {
+    fn call_install(&self, packages: &[super::InstallRequest]) -> crate::Result<(), TaskError> {
         todo!()
     }
 
-    fn remove_packages(&self, packages: &[&str]) -> Result<Vec<super::PackageStatus>, TaskError> {
+    fn call_remove(&self, packages: &[&str]) -> crate::Result<(), TaskError> {
         todo!()
     }
 }
