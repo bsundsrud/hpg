@@ -7,7 +7,31 @@ use rlua::{Lua, Table};
 use crate::actions::util::{action_error, io_error, run_chown};
 
 use crate::error::TaskError;
-use crate::{Result, WRITER};
+use crate::{hash, Result, WRITER};
+
+pub fn hash_file(lua: &Lua) -> Result<()> {
+    lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
+        let f = lua_ctx.create_function(|_, file: String| {
+            let h = hash::file_hash(Path::new(&file)).map_err(io_error)?;
+            Ok(h)
+        })?;
+        lua_ctx.globals().set("file_hash", f)?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+pub fn hash_text(lua: &Lua) -> Result<()> {
+    lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
+        let f = lua_ctx.create_function(|_, text: String| {
+            let h = hash::content_hash(&text);
+            Ok(h)
+        })?;
+        lua_ctx.globals().set("hash", f)?;
+        Ok(())
+    })?;
+    Ok(())
+}
 
 pub fn symlink(lua: &Lua) -> Result<()> {
     lua.context::<_, Result<(), TaskError>>(|lua_ctx| {

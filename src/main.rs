@@ -8,6 +8,7 @@ use tasks::TaskRef;
 
 mod actions;
 mod error;
+mod hash;
 mod lua;
 mod output;
 mod tasks;
@@ -53,6 +54,8 @@ fn main() -> Result<()> {
     lua.register_fn(actions::symlink)?;
     lua.register_fn(actions::mkdir)?;
     lua.register_fn(actions::touch)?;
+    lua.register_fn(actions::hash_file)?;
+    lua.register_fn(actions::hash_text)?;
     lua.register_fn(actions::package)?;
     lua.register_fn(actions::cancel)?;
     lua.register_fn(actions::success)?;

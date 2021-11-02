@@ -10,7 +10,7 @@ use rlua::{Lua, Table};
 use crate::{
     actions::util::{action_error, io_error, lua_table_to_json, read_file, run_chown},
     error::TaskError,
-    Result, WRITER,
+    hash, Result, WRITER,
 };
 
 fn run_template(tmpl_path: &Path, context: serde_json::Value) -> Result<String, TaskError> {
@@ -20,6 +20,15 @@ fn run_template(tmpl_path: &Path, context: serde_json::Value) -> Result<String, 
     let rendered = tera::Tera::one_off(&tmpl_contents, &ctx, false)
         .map_err(|e| TaskError::ActionError(format!("Failed to render template: {}", e)))?;
     Ok(rendered)
+}
+
+fn hashes_match(dst: &Path, contents: &str) -> Result<bool, std::io::Error> {
+    if !dst.exists() || !dst.is_file() {
+        return Ok(false);
+    }
+    let dst_hash = hash::file_hash(&dst)?;
+    let content_hash = hash::content_hash(&contents);
+    Ok(dst_hash == content_hash)
 }
 
 pub fn copy(lua: &Lua) -> Result<()> {
@@ -72,13 +81,17 @@ pub fn copy(lua: &Lua) -> Result<()> {
                 } else {
                     read_file(&src.as_path()).map_err(io_error)?
                 };
-                let mut outfile = OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(&dst)
-                    .map_err(io_error)?;
-                outfile.write_all(output.as_bytes()).map_err(io_error)?;
+                if !hashes_match(&dst, &output).map_err(io_error)? {
+                    let mut outfile = OpenOptions::new()
+                        .write(true)
+                        .create(true)
+                        .truncate(true)
+                        .open(&dst)
+                        .map_err(io_error)?;
+                    outfile.write_all(output.as_bytes()).map_err(io_error)?;
+                } else {
+                    WRITER.write("files matched, skipped");
+                }
                 if let Some(mode) = mode {
                     let mode = mode.map_err(|e| action_error(e.to_string()))?;
                     let f = File::open(&dst).map_err(io_error)?;

@@ -7,17 +7,43 @@ mod packages;
 mod process;
 mod util;
 pub use copy::copy;
-pub use file::{mkdir, symlink, touch};
+pub use file::{hash_file, hash_text, mkdir, symlink, touch};
 pub use packages::package;
 pub use process::{exec, shell};
 use rlua::Lua;
 
+fn format_lua_value(v: rlua::Value) -> Result<String, rlua::Error> {
+    let s = match v {
+        rlua::Value::Nil => String::from("nil"),
+        rlua::Value::Boolean(b) => String::from(if b { "true" } else { "false" }),
+        rlua::Value::LightUserData(v) => format!("<{:?}>", v),
+        rlua::Value::Integer(i) => format!("{:?}", i),
+        rlua::Value::Number(n) => format!("{:?}", n),
+        rlua::Value::String(s) => format!("\"{}\"", &s.to_str()?),
+        rlua::Value::Table(t) => {
+            let mut pairs = Vec::new();
+            for pair in t.pairs() {
+                let (k, v) = pair?;
+                let k_str = format_lua_value(k)?;
+                let v_str = format_lua_value(v)?;
+                pairs.push(format!("{} = {}", k_str, v_str));
+            }
+            format!("{{ {} }}", pairs.join(", "))
+        }
+        rlua::Value::Function(f) => format!("<{:?}>", f),
+        rlua::Value::Thread(t) => format!("<{:?}>", t),
+        rlua::Value::UserData(d) => format!("<{:?}>", d),
+        rlua::Value::Error(e) => format!("<error: {}>", e),
+    };
+    Ok(s)
+}
+
 pub fn echo(lua: &Lua) -> Result<()> {
     lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
-        let f = lua_ctx.create_function(|_, msg: String| {
+        let f = lua_ctx.create_function(|_, msg: rlua::Value| {
             WRITER.write("echo:");
             let _guard = WRITER.enter("echo");
-            WRITER.write(msg);
+            WRITER.write(format_lua_value(msg)?);
             Ok(())
         })?;
         lua_ctx.globals().set("echo", f)?;

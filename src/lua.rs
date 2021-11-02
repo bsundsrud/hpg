@@ -15,10 +15,15 @@ pub struct LuaState {
     tasks: Arc<Mutex<Vec<TaskDefinition>>>,
 }
 
+fn std_lib() -> rlua::StdLib {
+    use rlua::StdLib;
+    StdLib::BASE | StdLib::TABLE | StdLib::STRING | StdLib::UTF8 | StdLib::MATH | StdLib::PACKAGE
+}
+
 impl LuaState {
     pub fn new() -> Result<Self> {
         let lua = Self {
-            lua: Lua::new(),
+            lua: Lua::new_with(std_lib()),
             tasks: Arc::new(Mutex::new(Vec::new())),
         };
         lua.task_defines()?;
