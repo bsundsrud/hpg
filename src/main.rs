@@ -51,6 +51,7 @@ fn main() -> Result<()> {
     lua.register_fn(actions::exec)?;
     lua.register_fn(actions::shell)?;
     lua.register_fn(actions::copy)?;
+    lua.register_fn(actions::append)?;
     lua.register_fn(actions::symlink)?;
     lua.register_fn(actions::mkdir)?;
     lua.register_fn(actions::touch)?;

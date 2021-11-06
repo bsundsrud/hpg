@@ -6,7 +6,7 @@ mod file;
 mod packages;
 mod process;
 mod util;
-pub use copy::copy;
+pub use copy::{append, copy};
 pub use file::{hash_file, hash_text, mkdir, symlink, touch};
 pub use packages::package;
 pub use process::{exec, shell};

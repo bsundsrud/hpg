@@ -85,9 +85,9 @@ impl PackageManager for PacmanManager {
                 requests.push(package.name.clone());
             }
         }
-
-        let output =
-            self.call_pacman(&["-S", "--noconfirm", "--noprogressbar", &requests.join(" ")])?;
+        let mut args = vec!["-S", "--noconfirm", "--noprogressbar"];
+        args.extend(requests.iter().map(|s| s.as_str()));
+        let output = self.call_pacman(&args)?;
 
         if output.stdout.len() > 0 {
             WRITER.write("stdout:");
