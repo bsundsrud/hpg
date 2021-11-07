@@ -60,6 +60,8 @@ fn main() -> Result<()> {
     lua.register_fn(actions::package)?;
     lua.register_fn(actions::cancel)?;
     lua.register_fn(actions::success)?;
+    lua.register_fn(actions::user)?;
+    lua.register_fn(actions::group)?;
 
     let lua = lua.eval(&code)?;
     lua.execute(&task_refs)?;

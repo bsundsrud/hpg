@@ -1,11 +1,13 @@
 use std::sync::Arc;
 
 use crate::{error::TaskError, tasks::TaskResult, Result, WRITER};
+mod access;
 mod copy;
 mod file;
 mod packages;
 mod process;
 mod util;
+pub use access::{group, user};
 pub use copy::{append, copy};
 pub use file::{hash_file, hash_text, mkdir, symlink, touch};
 pub use packages::package;
