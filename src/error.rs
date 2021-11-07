@@ -13,6 +13,8 @@ pub enum TaskError {
     IoError(#[from] std::io::Error),
     #[error("Action Failed: {0}")]
     ActionError(String),
+    #[error("A task was skipped")]
+    SkippedTask,
 }
 
 #[derive(Debug, Error)]

@@ -15,6 +15,22 @@ pub enum TaskResult {
     Incomplete(Option<String>),
 }
 
+impl TaskResult {
+    pub fn succeeded(&self) -> bool {
+        match self {
+            TaskResult::Success => true,
+            TaskResult::Incomplete(_) => false,
+        }
+    }
+
+    pub fn incomplete(&self) -> bool {
+        match self {
+            TaskResult::Success => false,
+            TaskResult::Incomplete(_) => true,
+        }
+    }
+}
+
 impl UserData for TaskResult {}
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]

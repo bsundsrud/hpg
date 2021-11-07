@@ -6,7 +6,7 @@ use std::fs::File;
 use structopt::StructOpt;
 use tasks::TaskRef;
 
-mod actions;
+pub(crate) mod actions;
 mod error;
 mod hash;
 mod lua;
@@ -34,9 +34,22 @@ fn load_file(fname: &str) -> Result<String, HpgError> {
 #[derive(Debug, StructOpt)]
 #[structopt(name = "hpg", about = "config management tool")]
 struct Opt {
-    #[structopt(short, long, name = "CONFIG", default_value = "hpg.lua")]
+    #[structopt(
+        short,
+        long,
+        name = "CONFIG",
+        default_value = "hpg.lua",
+        help = "Path to hpg config file"
+    )]
     config: String,
-    #[structopt(name = "TARGETS")]
+    #[structopt(
+        short = "D",
+        long = "default-targets",
+        name = "default-targets",
+        help = "Run default targets in config"
+    )]
+    run_defaults: bool,
+    #[structopt(name = "TARGETS", help = "Task names to run")]
     targets: Vec<String>,
 }
 
@@ -44,7 +57,6 @@ fn main() -> Result<()> {
     let opt = Opt::from_args();
     let code = load_file(&opt.config)?;
     let task_refs: Vec<TaskRef> = opt.targets.into_iter().map(TaskRef::new).collect();
-
     let lua = LuaState::new()?;
     lua.register_fn(actions::echo)?;
     lua.register_fn(actions::fail)?;
@@ -64,7 +76,7 @@ fn main() -> Result<()> {
     lua.register_fn(actions::group)?;
 
     let lua = lua.eval(&code)?;
-    lua.execute(&task_refs)?;
+    lua.execute(&task_refs, opt.run_defaults)?;
 
     Ok(())
 }

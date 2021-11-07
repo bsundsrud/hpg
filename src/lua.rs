@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::{
+    actions::util::action_error,
     error::TaskError,
     tasks::{TaskDefinition, TaskGraphState, TaskRef, TaskResult},
     Result, WRITER,
@@ -61,6 +62,32 @@ impl LuaState {
             )?;
 
             globals.set("task", task_fn)?;
+
+            let targets: Vec<String> = Vec::new();
+            lua_ctx.set_named_registry_value("targets", targets)?;
+            let target_fn = lua_ctx.create_function(|ctx, task: rlua::Value| {
+                let mut targets: Vec<String> = ctx.named_registry_value("targets")?;
+
+                let tasks: Vec<String> = match task {
+                    rlua::Value::Nil => return Ok(()),
+                    rlua::Value::String(s) => vec![s.to_str()?.to_string()],
+                    rlua::Value::Table(t) => {
+                        let v = t
+                            .sequence_values::<String>()
+                            .collect::<Result<Vec<String>, rlua::Error>>();
+                        v?
+                    }
+                    _ => return Err(action_error("target() accepts only nil, a single string, or a table sequence of strings")),
+                };
+                for task in tasks {
+                    if !targets.contains(&task) {
+                        targets.push(task);
+                    }
+                }
+                ctx.set_named_registry_value("targets", targets)?;
+                Ok(())
+            })?;
+            globals.set("target", target_fn)?;
             Ok(())
         })?;
         Ok(())
@@ -95,10 +122,17 @@ impl EvaluatedLuaState {
         Ok(self.graph.execution_for_tasks(tasks)?)
     }
 
-    pub fn execute(&self, tasks: &[TaskRef]) -> Result<()> {
+    pub fn execute(&self, tasks: &[TaskRef], run_targets: bool) -> Result<()> {
         self.lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
             let task_table: Table = lua_ctx.named_registry_value("tasks")?;
-            let ordering = self.execution_ordering(tasks)?;
+            let ordering = if run_targets {
+                let targets: Vec<String> = lua_ctx.named_registry_value("targets")?;
+                let mut targets: Vec<TaskRef> = targets.into_iter().map(|s| s.into()).collect();
+                targets.extend(tasks.into_iter().map(|t| t.clone()));
+                self.execution_ordering(&targets)?
+            } else {
+                self.execution_ordering(tasks)?
+            };
             let _guard = WRITER.enter("tasks");
             let mut results: HashMap<TaskRef, TaskResult> = HashMap::new();
 
@@ -146,6 +180,9 @@ impl EvaluatedLuaState {
                     }
                     Err(e) => return Err(e.into()),
                 }
+            }
+            if results.into_values().any(|r| r.incomplete()) {
+                return Err(TaskError::SkippedTask);
             }
             Ok(())
         })?;
