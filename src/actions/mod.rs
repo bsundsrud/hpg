@@ -7,7 +7,7 @@ mod file;
 mod packages;
 mod process;
 pub(crate) mod util;
-pub use access::{group, user};
+pub use access::{chmod, chown, group, group_exists_action, user, user_exists_action};
 pub use copy::{append, copy};
 pub use file::{hash_file, hash_text, mkdir, symlink, touch};
 pub use packages::package;

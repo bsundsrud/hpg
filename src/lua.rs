@@ -9,7 +9,7 @@ use crate::{
     tasks::{TaskDefinition, TaskGraphState, TaskRef, TaskResult},
     Result, WRITER,
 };
-use rlua::{Function, Lua, Table};
+use rlua::{Function, Lua, Table, Variadic};
 
 pub struct LuaState {
     lua: Lua,
@@ -65,20 +65,11 @@ impl LuaState {
 
             let targets: Vec<String> = Vec::new();
             lua_ctx.set_named_registry_value("targets", targets)?;
-            let target_fn = lua_ctx.create_function(|ctx, task: rlua::Value| {
+            let target_fn = lua_ctx.create_function(|ctx, tasks: Variadic<String>| {
                 let mut targets: Vec<String> = ctx.named_registry_value("targets")?;
 
-                let tasks: Vec<String> = match task {
-                    rlua::Value::Nil => return Ok(()),
-                    rlua::Value::String(s) => vec![s.to_str()?.to_string()],
-                    rlua::Value::Table(t) => {
-                        let v = t
-                            .sequence_values::<String>()
-                            .collect::<Result<Vec<String>, rlua::Error>>();
-                        v?
-                    }
-                    _ => return Err(action_error("target() accepts only nil, a single string, or a table sequence of strings")),
-                };
+                let tasks: Vec<String> = tasks.into_iter().collect();
+
                 for task in tasks {
                     if !targets.contains(&task) {
                         targets.push(task);

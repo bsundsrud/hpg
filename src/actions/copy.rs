@@ -169,69 +169,81 @@ pub fn append(lua: &Lua) -> Result<()> {
             } else {
                 input
             };
-
-            let mut target_contents = read_file(&dst).map_err(io_error)?;
             let content_hash = hash::content_hash(&output);
-            if target_contents.contains(&marker) {
-                // we've already got a section, check if it needs updates
-                let mut found_start = false;
-                let mut found_end = false;
-                let mut matches = false;
-                let mut new_lines = Vec::new();
-                let mut output_lines = Vec::new();
-                let marker_line = format!("{} {}", marker, content_hash);
-                output_lines.push(marker_line.clone());
-                output_lines.extend(output.lines().map(|s| s.to_string()));
-                output_lines.push(marker_line.clone());
+            if !dst.exists() {
+                let contents = format!(
+                    "{} {}\n{}\n{} {}\n",
+                    marker, content_hash, output, marker, content_hash
+                );
+                let mut outfile = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(&dst)
+                    .map_err(io_error)?;
+                outfile.write_all(contents.as_bytes()).map_err(io_error)?;
+            } else {
+                let mut target_contents = read_file(&dst).map_err(io_error)?;
+                if target_contents.contains(&marker) {
+                    // we've already got a section, check if it needs updates
+                    let mut found_start = false;
+                    let mut found_end = false;
+                    let mut matches = false;
+                    let mut new_lines = Vec::new();
+                    let mut output_lines = Vec::new();
+                    let marker_line = format!("{} {}", marker, content_hash);
+                    output_lines.push(marker_line.clone());
+                    output_lines.extend(output.lines().map(|s| s.to_string()));
+                    output_lines.push(marker_line.clone());
 
-                for line in target_contents.lines() {
-                    if line.contains(&marker) && !found_start {
-                        let old_hash = line.trim_start_matches(&marker).trim();
-                        found_start = true;
-                        if old_hash == content_hash {
-                            // break early, sections match so don't touch the file
-                            matches = true;
-                            break;
+                    for line in target_contents.lines() {
+                        if line.contains(&marker) && !found_start {
+                            let old_hash = line.trim_start_matches(&marker).trim();
+                            found_start = true;
+                            if old_hash == content_hash {
+                                // break early, sections match so don't touch the file
+                                matches = true;
+                                break;
+                            } else {
+                                // sections don't match, append new section and start ignoring old section
+                                new_lines.extend_from_slice(&output_lines);
+                            }
+                        } else if line.contains(&marker) && found_start {
+                            found_end = true;
+                        } else if found_start && !found_end {
+                            // Ignore these lines, we're between the start and end and we don't match
                         } else {
-                            // sections don't match, append new section and start ignoring old section
-                            new_lines.extend_from_slice(&output_lines);
+                            new_lines.push(line.to_string());
                         }
-                    } else if line.contains(&marker) && found_start {
-                        found_end = true;
-                    } else if found_start && !found_end {
-                        // Ignore these lines, we're between the start and end and we don't match
-                    } else {
-                        new_lines.push(line.to_string());
                     }
-                }
-                if !matches {
+                    if !matches {
+                        let mut outfile = OpenOptions::new()
+                            .write(true)
+                            .truncate(true)
+                            .open(&dst)
+                            .map_err(io_error)?;
+                        outfile
+                            .write_all(new_lines.join("\n").as_bytes())
+                            .map_err(io_error)?;
+                    } else {
+                        WRITER.write("section matched, skipped");
+                    }
+                } else {
+                    // just append, currently doesn't exist
+                    target_contents.push_str(&format!(
+                        "\n{} {}\n{}\n{} {}\n",
+                        marker, content_hash, output, marker, content_hash
+                    ));
                     let mut outfile = OpenOptions::new()
                         .write(true)
                         .truncate(true)
                         .open(&dst)
                         .map_err(io_error)?;
                     outfile
-                        .write_all(new_lines.join("\n").as_bytes())
+                        .write_all(target_contents.as_bytes())
                         .map_err(io_error)?;
-                } else {
-                    WRITER.write("section matched, skipped");
                 }
-            } else {
-                // just append, currently doesn't exist
-                target_contents.push_str(&format!(
-                    "\n{} {}\n{}\n{} {}\n",
-                    marker, content_hash, output, marker, content_hash
-                ));
-                let mut outfile = OpenOptions::new()
-                    .write(true)
-                    .truncate(true)
-                    .open(&dst)
-                    .map_err(io_error)?;
-                outfile
-                    .write_all(target_contents.as_bytes())
-                    .map_err(io_error)?;
             }
-
             let retval = ctx.create_table()?;
             Ok(retval)
         })?;

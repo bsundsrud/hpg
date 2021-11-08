@@ -1,7 +1,17 @@
 use rlua::{Error as LuaError, Lua, Table};
 
-use crate::{error::TaskError, Result, WRITER};
-use std::{io::Error as IoError, process::Command};
+use crate::{
+    actions::util::{self, action_error},
+    error::TaskError,
+    Result, WRITER,
+};
+use std::{
+    fs::{File, Permissions},
+    io::Error as IoError,
+    os::unix::prelude::PermissionsExt,
+    path::Path,
+    process::Command,
+};
 
 use super::{
     process::exit_status,
@@ -156,8 +166,8 @@ fn modify_user(user: UserDef) -> Result<(), TaskError> {
 }
 
 fn user_exists(name: &str) -> Result<bool, IoError> {
-    let cmd = Command::new("id").arg(name).status()?;
-    Ok(cmd.success())
+    let cmd = Command::new("id").arg(name).output()?;
+    Ok(cmd.status.success())
 }
 
 fn create_group(group: GroupDef) -> Result<(), TaskError> {
@@ -202,8 +212,8 @@ fn modify_group(group: GroupDef) -> Result<(), TaskError> {
 }
 
 fn group_exists(name: &str) -> Result<bool, IoError> {
-    let cmd = Command::new("getent").arg("group").arg(name).status()?;
-    Ok(cmd.success())
+    let cmd = Command::new("getent").arg("group").arg(name).output()?;
+    Ok(cmd.status.success())
 }
 
 pub fn user(lua: &Lua) -> Result<()> {
@@ -224,9 +234,28 @@ pub fn user(lua: &Lua) -> Result<()> {
     Ok(())
 }
 
+pub fn user_exists_action(lua: &Lua) -> Result<()> {
+    lua.context::<_, Result<(), TaskError>>(|ctx| {
+        let f = ctx.create_function(|_ctx, name: String| {
+            let e = user_exists(&name).map_err(io_error)?;
+            WRITER.write(format!("User {} exists: {}", name, e));
+
+            Ok(e)
+        })?;
+        ctx.globals().set("user_exists", f)?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
 pub fn group(lua: &Lua) -> Result<()> {
     lua.context::<_, Result<(), TaskError>>(|ctx| {
-        let f = ctx.create_function(|_ctx, (name, opts): (String, Table)| {
+        let f = ctx.create_function(|ctx, (name, opts): (String, Option<Table>)| {
+            let opts = if let Some(o) = opts {
+                o
+            } else {
+                ctx.create_table()?
+            };
             if group_exists(&name).map_err(io_error)? {
                 WRITER.write(format!("Modify group {}", name));
                 modify_group(GroupDef::from_lua(name, opts)?).map_err(task_error)?;
@@ -237,6 +266,57 @@ pub fn group(lua: &Lua) -> Result<()> {
             Ok(())
         })?;
         ctx.globals().set("group", f)?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+pub fn group_exists_action(lua: &Lua) -> Result<()> {
+    lua.context::<_, Result<(), TaskError>>(|ctx| {
+        let f = ctx.create_function(|_ctx, name: String| {
+            let e = group_exists(&name).map_err(io_error)?;
+            WRITER.write(format!("Group {} exists: {}", name, e));
+
+            Ok(e)
+        })?;
+        ctx.globals().set("group_exists", f)?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+pub fn chown(lua: &Lua) -> Result<()> {
+    lua.context::<_, Result<(), TaskError>>(|ctx| {
+        let f = ctx.create_function(|_ctx, (file, opts): (String, Table)| {
+            WRITER.write(format!("Chown {}:", file));
+            let _g = WRITER.enter("chown");
+            let user: Option<rlua::Value> = opts.get("user")?;
+            let group: Option<rlua::Value> = opts.get("group")?;
+            util::run_chown(Path::new(&file), user, group)?;
+
+            Ok(())
+        })?;
+        ctx.globals().set("chown", f)?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+pub fn chmod(lua: &Lua) -> Result<()> {
+    lua.context::<_, Result<(), TaskError>>(|ctx| {
+        let f = ctx.create_function(|_ctx, (file, mode): (String, String)| {
+            WRITER.write(format!("Chmod {} {}", file, mode));
+            let _g = WRITER.enter("chmod");
+            let mode = u32::from_str_radix(&mode, 8)
+                .map_err(|e| action_error(format!("Invalid Mode {}: {}", mode, e)))?;
+
+            let f = File::open(&file).map_err(io_error)?;
+            f.set_permissions(Permissions::from_mode(mode))
+                .map_err(io_error)?;
+
+            Ok(())
+        })?;
+        ctx.globals().set("chmod", f)?;
         Ok(())
     })?;
     Ok(())

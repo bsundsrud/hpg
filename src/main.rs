@@ -73,7 +73,11 @@ fn main() -> Result<()> {
     lua.register_fn(actions::cancel)?;
     lua.register_fn(actions::success)?;
     lua.register_fn(actions::user)?;
+    lua.register_fn(actions::user_exists_action)?;
     lua.register_fn(actions::group)?;
+    lua.register_fn(actions::group_exists_action)?;
+    lua.register_fn(actions::chown)?;
+    lua.register_fn(actions::chmod)?;
 
     let lua = lua.eval(&code)?;
     lua.execute(&task_refs, opt.run_defaults)?;
