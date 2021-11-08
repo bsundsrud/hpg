@@ -1,8 +1,6 @@
 # HPG Reference
 
-## Guide
-
-### Tasks
+## Tasks
 
 Tasks are the primary execution unit in HPG. They define actions
 to run (Lua code), along with a name for the task and a list of
@@ -13,7 +11,7 @@ their dependency trees, and then executed in topological order.
 
 See [task()](#task).
 
-### Targets
+## Targets
 
 Targets are task names. You use them on the command line to request
 task execution, or you can declare default targets that will be run
@@ -25,7 +23,7 @@ multiple machines can live in one source code repository.
 
 See [target()](#target).
 
-### Execution Model
+## Execution Model
 
 HPG executes in two passes: Definition and Execution. During Definition,
 Tasks and Targets are discovered. If `-D` is specified, any Targets will
@@ -42,7 +40,7 @@ task to be skipped, but not otherwise interfere with execution. Any task that
 results in a runtime error (or explicitly calls `fail()`) will immediately
 terminate execution.
 
-### Code Organization
+## Code Organization
 
 The root config file is named `hpg.lua` by default (can be overridden
 with the `-c` option). As configs grow, splitting tasks and other code
