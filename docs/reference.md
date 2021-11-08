@@ -72,7 +72,7 @@ function body.
   no arguments, and return type is `nil` or a result, such as
   [`success()`](#success) or [`cancel()`](#cancel)
 * Example:
-  ```
+  ```lua
   task("other", {"root"}, function()
     echo("other")
   end)
@@ -90,8 +90,8 @@ function body.
     echo:
       "other"
 ]]
+```
 
-  ```
 <hr>
 
 <a id="target"></a>
