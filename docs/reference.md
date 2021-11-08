@@ -81,7 +81,7 @@ function body.
     echo("hello")
   end)
 
---[[
+  --[[
   Output of `hpg other`:
   task [ root ]:
     echo:
@@ -89,7 +89,7 @@ function body.
   task [ other ]:
     echo:
       "other"
-]]
+  ]]
 ```
 
 <hr>
