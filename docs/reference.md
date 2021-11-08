@@ -71,7 +71,27 @@ function body.
 * `f`: Function() - function body executed when task is executed. Receives
   no arguments, and return type is `nil` or a result, such as
   [`success()`](#success) or [`cancel()`](#cancel)
+* Example:
+  ```
+  task("other", {"root"}, function()
+    echo("other")
+  end)
 
+  task("root", {}, function()
+    echo("hello")
+  end)
+
+--[[
+  Output of `hpg other`:
+  task [ root ]:
+    echo:
+      "hello"
+  task [ other ]:
+    echo:
+      "other"
+]]
+
+  ```
 <hr>
 
 <a id="target"></a>
