@@ -72,9 +72,13 @@ function body.
   no arguments, and return type is `nil` or a result, such as
   [`success()`](#success) or [`cancel()`](#cancel)
 
+<hr>
+
 <a id="target"></a>
 `target(target...)` - Declare one or more tasks as default targets.
 * `target`: String - a variadic list of task names.
+
+<hr>
 
 <a id="success"></a>
 `success()` - Sigil to be used as a return value from a task.
@@ -84,6 +88,8 @@ function body.
     return success()
   end)
   ```
+
+<hr>
 
 <a id="cancel"></a>
 `cancel(reason)` - Return this from a task to cancel the current task and
@@ -96,6 +102,8 @@ skip any downstream task.
   end)
   ```
 
+<hr>
+
 <a id="fail"></a>
 `fail(reason)` - Call to immediately halt execution and exit with an error.
 * `reason`: String - reason for failure.
@@ -104,24 +112,34 @@ skip any downstream task.
 
 Helper functions to make script-writing easier.
 
+<hr>
+
 <a id="echo"></a>
 `echo(value)` - Pretty-prints the Lua value to stdout.
 * `value`: Any - Any Lua value.
+
+<hr>
 
 <a id="file_hash"></a>
 `file_hash(path)` - Compute the Sha-256 hash of a file.
 * `path`: String - Path to the file to hash.
 * Returns String - the hex string of the full Sha-256 hash.
 
+<hr>
+
 <a id="group_exists"></a>
 `group_exists(groupname)` - Check if a group already exists on a system.
 * `groupname`: String - Name of group.
 * Returns `bool`: `true` if group exists, `false` otherwise.
 
+<hr>
+
 <a id="hash"></a>
 `hash(value)` - Compute the Sha-256 hash of a string.
 * `value`: String - String to hash.
 * Returns String - the hex string of the full Sha-256 hash.
+
+<hr>
 
 <a id="user_exists"></a>
 `user_exists(username)` - Check if a user already exists on a system.
@@ -132,6 +150,8 @@ Helper functions to make script-writing easier.
 ### Actions
 
 These functions perform some action that may have side effects on the system.
+
+<hr>
 
 <a id="append"></a>
 `append(path, options)` - Append to an existing file, without overwriting
@@ -148,10 +168,14 @@ region is unchanged.
     `src` or `contents` as a Tera template.
   * `context`: optional Table (default `{}`) - Variables available within a template.
 
+<hr>
+
 <a id="chmod"></a>
 `chmod(file, mode)` - Change access modifiers for the given file.
 * `file`: String - path to file to be changed.
 * `mode`: String - Octal file mode (such as `"0644"` or `"0755"`)
+
+<hr>
 
 <a id="chown"></a>
 `chown(file, opts)` - Change file user/group ownership.
@@ -159,6 +183,8 @@ region is unchanged.
 * `opts`: Table
   * `user`: optional String - User to assign file to.
   * `group`: optional String - Group to assign file to.
+
+<hr>
 
 <a id="copy"></a>
 `copy(src, dst, opts)` - Copy files, executing Tera templates if needed.  Does
@@ -172,6 +198,8 @@ not change the destination file if source and destination hashes match.
   * `mode`: optional String - Octal file mode (such as `"0644"` or `"0755"`).
   * `user`: optional String - User to assign file to.
   * `group`: optional String - Group to assign file to.
+
+<hr>
 
 <a id="exec"></a>
 `exec(cmd, opts)` - Run an executable as a subprocess.
@@ -193,12 +221,16 @@ not change the destination file if source and destination hashes match.
   * `stdout`: String - Output sent to stdout.
   * `stderr`: String - Output sent to stderr.
 
+<hr>
+
 <a id="group"></a>
 `group(name, opts)` - Create or modify a group.
 * `name`: String - Name of group to create/modify.
 * `opts`: optional Table
   * `gid`: optional Number - directly assign a gid
   * `is_system`: optional bool (default `false`) - Whether group is a system group.
+
+<hr>
 
 <a id="mkdir"></a>
 `mkdir(path, opts)` - Create a directory and any parent directories, as need.
@@ -207,6 +239,8 @@ not change the destination file if source and destination hashes match.
   * `mode`: optional String - Octal directory mode.
   * `user`: optional String - User to assign directory to.
   * `group`: optional String - Group to assign directory to.
+
+<hr>
 
 <a id="packaging"></a>
 `packaging(mgr, opts)` - Perform package management operations.
@@ -223,6 +257,8 @@ not change the destination file if source and destination hashes match.
     `"notfound"`, `"notinstalled"`, `"requested"`).
   * `removed`: Table - List of packages removed
   * `updated`: bool - whether or not a repo update was performed
+
+<hr>
 
 <a id="shell"></a>
 `shell(cmd, opts)` - Run a command via a subshell. Copies `cmd` to a text file
@@ -246,6 +282,8 @@ and executes that file as a shell script.
   * `stdout`: String - Output sent to stdout.
   * `stderr`: String - Output sent to stderr.
 
+<hr>
+
 <a id="symlink"></a>
 `symlink(src, dst, opts)` - Create a symlink.
 * `src`: String - Source path of the symlink.
@@ -255,6 +293,8 @@ and executes that file as a shell script.
   * `user`: optional String - User to assign symlink to.
   * `group`: optional String - Group to assign symlink to.
 
+<hr>
+
 <a id="touch"></a>
 `touch(path, opts)` - Create an empty file, if it does not already exist.
 * `path`: String - Path to file, relative to current directory.
@@ -262,6 +302,8 @@ and executes that file as a shell script.
   * `mode`: optional String - Octal file mode.
   * `user`: optional String - User to assign symlink to.
   * `group`: optional String - Group to assign symlink to.
+
+<hr>
 
 <a id="user"></a>
 `user(name, opts)` - Create or modify a user.
