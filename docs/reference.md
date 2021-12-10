@@ -138,10 +138,24 @@ Helper functions to make script-writing easier.
 
 <hr>
 
+<a id="file_contents"></a>
+`file_contents(path)` - Return the contents of the given file as a String.
+* `path`: String - Path to the file to read.
+* Returns String - the file contents.
+
+<hr>
+
 <a id="file_hash"></a>
 `file_hash(path)` - Compute the Sha-256 hash of a file.
 * `path`: String - Path to the file to hash.
 * Returns String - the hex string of the full Sha-256 hash.
+
+<hr>
+
+<a id="from_json"></a>
+`from_json(s)` - Parse the given JSON string as a Lua value.
+* `s`: String - JSON body.
+* Returns Value - A Lua Value representing the JSON body.
 
 <hr>
 

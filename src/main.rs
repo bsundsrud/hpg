@@ -78,6 +78,8 @@ fn main() -> Result<()> {
     lua.register_fn(actions::group_exists_action)?;
     lua.register_fn(actions::chown)?;
     lua.register_fn(actions::chmod)?;
+    lua.register_fn(actions::file_contents)?;
+    lua.register_fn(actions::from_json)?;
 
     let lua = lua.eval(&code)?;
     lua.execute(&task_refs, opt.run_defaults)?;

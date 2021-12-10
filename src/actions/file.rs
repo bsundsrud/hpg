@@ -9,6 +9,8 @@ use crate::actions::util::{action_error, io_error, run_chown};
 use crate::error::TaskError;
 use crate::{hash, Result, WRITER};
 
+use super::util;
+
 pub fn hash_file(lua: &Lua) -> Result<()> {
     lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
         let f = lua_ctx.create_function(|_, file: String| {
@@ -161,3 +163,37 @@ pub fn touch(lua: &Lua) -> Result<()> {
     })?;
     Ok(())
 }
+
+pub fn file_contents(lua: &Lua) -> Result<()> {
+    lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
+        let f = lua_ctx.create_function(|_ctx, path: String| {
+            let cwd = Path::new(".");
+            let p = cwd.join(path);
+
+            WRITER.write(format!("file_contents {}", p.to_string_lossy()));
+            WRITER.enter("file_contents");
+
+            let buf = util::read_file(&p).map_err(io_error)?;
+            Ok(buf)
+        })?;
+        lua_ctx.globals().set("file_contents", f)?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+pub fn from_json(lua: &Lua) -> Result<()> {
+    lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
+        let f = lua_ctx.create_function(|ctx, json_str: String| {
+            WRITER.write("from_json");
+            WRITER.enter("from_json");
+            let json: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| action_error(format!("{}", e)))?;
+            let lua_val = util::json_to_lua_value(ctx, json)?;
+            Ok(lua_val)
+        })?;
+        lua_ctx.globals().set("from_json", f)?;
+        Ok(())
+    })?;
+    Ok(())
+}
+

@@ -1,8 +1,8 @@
 use crate::error::TaskError;
 use crate::WRITER;
 use nix::unistd::{Gid, Group, Uid, User};
-use rlua::Table;
-use serde_json::Map;
+use rlua::{Context, Table, ToLua};
+use serde_json::{Map, Value};
 use std::{convert::TryInto, fs::File, io::prelude::*, io::BufReader, path::Path, sync::Arc};
 
 pub(crate) fn action_error<S: Into<String>>(msg: S) -> rlua::Error {
@@ -104,7 +104,7 @@ pub(crate) fn run_chown(
     Ok(())
 }
 
-pub(crate) fn lua_table_to_json<'lua>(tbl: Table<'lua>) -> Result<serde_json::Value, TaskError> {
+pub(crate) fn lua_table_to_json<'lua>(tbl: Table<'lua>) -> Result<Value, TaskError> {
     use rlua::Value as LuaValue;
     use serde_json::Value as JsonValue;
 
@@ -132,5 +132,38 @@ pub(crate) fn lua_table_to_json<'lua>(tbl: Table<'lua>) -> Result<serde_json::Va
         };
         map.insert(k, json_value);
     }
-    Ok(serde_json::Value::Object(map))
+    Ok(Value::Object(map))
+}
+
+pub(crate) fn json_to_lua_value<'lua>(
+    ctx: Context<'lua>,
+    json: Value,
+) -> Result<rlua::Value<'lua>, rlua::Error> {
+    use rlua::Value as LuaValue;
+
+    let val = match json {
+        Value::Null => LuaValue::Nil,
+        Value::Bool(b) => LuaValue::Boolean(b),
+        Value::Number(f) => LuaValue::Number(f.as_f64().unwrap()),
+        Value::String(s) => s.to_lua(ctx)?,
+        Value::Array(v) => {
+            let tbl = ctx.create_table()?;
+            let mut idx = 0;
+            for item in v {
+                let lua_val = json_to_lua_value(ctx, item)?;
+                tbl.set(idx, lua_val)?;
+                idx += 1;
+            }
+            LuaValue::Table(tbl)
+        }
+        Value::Object(obj) => {
+            let tbl = ctx.create_table()?;
+            for (key, val) in obj.into_iter() {
+                let lua_val = json_to_lua_value(ctx, val)?;
+                tbl.set(key, lua_val)?;
+            }
+            LuaValue::Table(tbl)
+        }
+    };
+    Ok(val)
 }
