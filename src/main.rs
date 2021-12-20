@@ -80,6 +80,7 @@ fn main() -> Result<()> {
     lua.register_fn(actions::chmod)?;
     lua.register_fn(actions::file_contents)?;
     lua.register_fn(actions::from_json)?;
+    lua.register_fn(actions::file_exists)?;
 
     let lua = lua.eval(&code)?;
     lua.execute(&task_refs, opt.run_defaults)?;

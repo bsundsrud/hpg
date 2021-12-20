@@ -197,3 +197,19 @@ pub fn from_json(lua: &Lua) -> Result<()> {
     Ok(())
 }
 
+pub fn file_exists(lua: &Lua) -> Result<()> {
+    lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
+        let f = lua_ctx.create_function(|_ctx, path: String| {
+            WRITER.write(format!("file_exists {}", &path));
+            WRITER.enter("file_exists");
+            let cwd = Path::new(".");
+            let p = cwd.join(path);
+            let val = Path::new(&p).exists();
+            WRITER.write(format!("{}", val));
+            Ok(val)
+        })?;
+        lua_ctx.globals().set("file_exists", f)?;
+        Ok(())
+    })?;
+    Ok(())
+}

@@ -145,6 +145,13 @@ Helper functions to make script-writing easier.
 
 <hr>
 
+<a id="file_exists"></a>
+`file_exists(path)` - Return whether or not the given file exists.
+* `path`: String - Path to the file to check for existence.
+* Returns bool - true if the file exists, false otherwise.
+
+<hr>
+
 <a id="file_hash"></a>
 `file_hash(path)` - Compute the Sha-256 hash of a file.
 * `path`: String - Path to the file to hash.
