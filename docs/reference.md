@@ -207,7 +207,8 @@ region is unchanged.
   * `template`: optional bool (default `false`) - Whether or not to consider
     `src` or `contents` as a Tera template.
   * `context`: optional Table (default `{}`) - Variables available within a template.
-
+* Returns a table:
+  * `updated`: boolean, whether or not the section was appended or changed.
 <hr>
 
 <a id="chmod"></a>
@@ -238,6 +239,8 @@ not change the destination file if source and destination hashes match.
   * `mode`: optional String - Octal file mode (such as `"0644"` or `"0755"`).
   * `user`: optional String - User to assign file to.
   * `group`: optional String - Group to assign file to.
+* Returns a table:
+  * `updated`: boolean, whether or not the section was appended or changed.
 
 <hr>
 

@@ -89,6 +89,7 @@ pub fn copy(lua: &Lua) -> Result<()> {
                 } else {
                     read_file(&src.as_path()).map_err(io_error)?
                 };
+                let updated;
                 if !hashes_match(&dst, &output).map_err(io_error)? {
                     let mut outfile = OpenOptions::new()
                         .write(true)
@@ -97,8 +98,10 @@ pub fn copy(lua: &Lua) -> Result<()> {
                         .open(&dst)
                         .map_err(io_error)?;
                     outfile.write_all(output.as_bytes()).map_err(io_error)?;
+                    updated = true;
                 } else {
                     WRITER.write("files matched, skipped");
+                    updated = false;
                 }
                 if let Some(mode) = mode {
                     let mode = mode.map_err(|e| action_error(e.to_string()))?;
@@ -110,6 +113,7 @@ pub fn copy(lua: &Lua) -> Result<()> {
                 run_chown(&dst, user, group)?;
 
                 let retval = ctx.create_table()?;
+                retval.set("updated", updated)?;
                 Ok(retval)
             },
         )?;
@@ -170,6 +174,7 @@ pub fn append(lua: &Lua) -> Result<()> {
                 input
             };
             let content_hash = hash::content_hash(&output);
+            let updated;
             if !dst.exists() {
                 let contents = format!(
                     "{} {}\n{}\n{} {}\n",
@@ -182,6 +187,7 @@ pub fn append(lua: &Lua) -> Result<()> {
                     .open(&dst)
                     .map_err(io_error)?;
                 outfile.write_all(contents.as_bytes()).map_err(io_error)?;
+                updated = true;
             } else {
                 let mut target_contents = read_file(&dst).map_err(io_error)?;
                 if target_contents.contains(&marker) {
@@ -225,8 +231,10 @@ pub fn append(lua: &Lua) -> Result<()> {
                         outfile
                             .write_all(new_lines.join("\n").as_bytes())
                             .map_err(io_error)?;
+                        updated = true;
                     } else {
                         WRITER.write("section matched, skipped");
+                        updated = false;
                     }
                 } else {
                     // just append, currently doesn't exist
@@ -242,9 +250,11 @@ pub fn append(lua: &Lua) -> Result<()> {
                     outfile
                         .write_all(target_contents.as_bytes())
                         .map_err(io_error)?;
+                    updated = true;
                 }
             }
             let retval = ctx.create_table()?;
+            retval.set("updated", updated)?;
             Ok(retval)
         })?;
         lua_ctx.globals().set("append", f)?;

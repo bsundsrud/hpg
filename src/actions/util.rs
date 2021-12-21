@@ -148,7 +148,7 @@ pub(crate) fn json_to_lua_value<'lua>(
         Value::String(s) => s.to_lua(ctx)?,
         Value::Array(v) => {
             let tbl = ctx.create_table()?;
-            let mut idx = 0;
+            let mut idx = 1;
             for item in v {
                 let lua_val = json_to_lua_value(ctx, item)?;
                 tbl.set(idx, lua_val)?;
