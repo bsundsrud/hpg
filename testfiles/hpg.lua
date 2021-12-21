@@ -19,3 +19,5 @@ task("roles", {}, function()
   local meta = from_json(file_contents("meta.json"))
   echo(meta)
 end)
+
+task("empty", {"roles"})

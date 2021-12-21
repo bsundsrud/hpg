@@ -66,9 +66,10 @@ The following Lua Standard Library modules are included in HPG:
 function body.
 * `name`: String - defining the task name. Task names can be used as Targets.
 * `dependencies`: String sequence - List of tasks that this task depends upon.
-* `f`: Function() - function body executed when task is executed. Receives
+* `f`: Function() - Optional function body executed when task is executed. Receives
   no arguments, and return type is `nil` or a result, such as
-  [`success()`](#success) or [`cancel()`](#cancel)
+  [`success()`](#success) or [`cancel()`](#cancel). If omitted, function is assumed
+  to be successful.
 * Example:
   ```lua
   task("other", {"root"}, function()

@@ -51,11 +51,13 @@ impl LuaState {
             let task_table = lua_ctx.create_table()?;
             lua_ctx.set_named_registry_value("tasks", task_table)?;
             let task_fn = lua_ctx.create_function(
-                move |ctx, (task_name, dependencies, f): (String, Vec<String>, rlua::Function)| {
+                move |ctx, (task_name, dependencies, maybe_f): (String, Vec<String>, Option<rlua::Function>)| {
                     let mut tasks = tasks.lock().unwrap();
                     tasks.push(TaskDefinition::new(task_name.clone(), dependencies));
                     let table: Table = ctx.named_registry_value("tasks")?;
-                    table.set(task_name, f)?;
+                    if let Some(f) = maybe_f {
+                        table.set(task_name, f)?;
+                    }
                     ctx.set_named_registry_value("tasks", table)?;
                     Ok(())
                 },
@@ -147,29 +149,33 @@ impl EvaluatedLuaState {
                     continue;
                 }
 
-                let f: Function = task_table.get(task.name().as_ref())?;
-                match f.call(()) {
-                    Ok(rlua::Value::UserData(ud)) => {
-                        if ud.is::<TaskResult>() {
-                            let tr: &TaskResult = &ud.borrow().unwrap();
-                            if let TaskResult::Incomplete(_) = tr {
-                                WRITER.write("TASK INCOMPLETE");
+                let maybe_f: Option<Function> = task_table.get(task.name().as_ref())?;
+                if let Some(f) = maybe_f {
+                    match f.call(()) {
+                        Ok(rlua::Value::UserData(ud)) => {
+                            if ud.is::<TaskResult>() {
+                                let tr: &TaskResult = &ud.borrow().unwrap();
+                                if let TaskResult::Incomplete(_) = tr {
+                                    WRITER.write("TASK INCOMPLETE");
+                                }
+                                results.insert(task.name().clone(), tr.clone());
                             }
-                            results.insert(task.name().clone(), tr.clone());
                         }
-                    }
-                    Ok(_) => {
-                        results.insert(task.name().clone(), TaskResult::Success);
-                    }
-                    Err(rlua::Error::CallbackError { traceback, cause }) => {
-                        if let rlua::Error::ExternalError(ref e) = *cause.clone() {
-                            WRITER.write(format!("{}\n{}", e, traceback));
-                        } else {
-                            WRITER.write(format!("{}\n{}", cause, traceback));
+                        Ok(_) => {
+                            results.insert(task.name().clone(), TaskResult::Success);
                         }
-                        break;
+                        Err(rlua::Error::CallbackError { traceback, cause }) => {
+                            if let rlua::Error::ExternalError(ref e) = *cause.clone() {
+                                WRITER.write(format!("{}\n{}", e, traceback));
+                            } else {
+                                WRITER.write(format!("{}\n{}", cause, traceback));
+                            }
+                            break;
+                        }
+                        Err(e) => return Err(e.into()),
                     }
-                    Err(e) => return Err(e.into()),
+                } else {
+                    results.insert(task.name().clone(), TaskResult::Success);
                 }
             }
             if results.into_values().any(|r| r.incomplete()) {
