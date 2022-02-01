@@ -21,3 +21,13 @@ task("roles", {}, function()
 end)
 
 task("empty", {"roles"})
+
+task("test-files", {}, function()
+  local f = file("meta.json")
+  local meta = from_json(f:contents())
+  echo(meta)
+  file("doesnt-exist")
+     :touch()
+     :chmod("0755")
+     :copy("copied-file")
+end)

@@ -4,7 +4,6 @@ use std::{
 };
 
 use crate::{
-    actions::util::action_error,
     error::TaskError,
     tasks::{TaskDefinition, TaskGraphState, TaskRef, TaskResult},
     Result, WRITER,
@@ -51,7 +50,12 @@ impl LuaState {
             let task_table = lua_ctx.create_table()?;
             lua_ctx.set_named_registry_value("tasks", task_table)?;
             let task_fn = lua_ctx.create_function(
-                move |ctx, (task_name, dependencies, maybe_f): (String, Vec<String>, Option<rlua::Function>)| {
+                move |ctx,
+                      (task_name, dependencies, maybe_f): (
+                    String,
+                    Vec<String>,
+                    Option<rlua::Function>,
+                )| {
                     let mut tasks = tasks.lock().unwrap();
                     tasks.push(TaskDefinition::new(task_name.clone(), dependencies));
                     let table: Table = ctx.named_registry_value("tasks")?;

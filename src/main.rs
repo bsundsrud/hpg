@@ -10,6 +10,7 @@ pub(crate) mod actions;
 mod error;
 mod hash;
 mod lua;
+pub(crate) mod modules;
 mod output;
 mod tasks;
 
@@ -62,12 +63,6 @@ fn main() -> Result<()> {
     lua.register_fn(actions::fail)?;
     lua.register_fn(actions::exec)?;
     lua.register_fn(actions::shell)?;
-    lua.register_fn(actions::copy)?;
-    lua.register_fn(actions::append)?;
-    lua.register_fn(actions::symlink)?;
-    lua.register_fn(actions::mkdir)?;
-    lua.register_fn(actions::touch)?;
-    lua.register_fn(actions::hash_file)?;
     lua.register_fn(actions::hash_text)?;
     lua.register_fn(actions::package)?;
     lua.register_fn(actions::cancel)?;
@@ -76,11 +71,9 @@ fn main() -> Result<()> {
     lua.register_fn(actions::user_exists_action)?;
     lua.register_fn(actions::group)?;
     lua.register_fn(actions::group_exists_action)?;
-    lua.register_fn(actions::chown)?;
-    lua.register_fn(actions::chmod)?;
-    lua.register_fn(actions::file_contents)?;
     lua.register_fn(actions::from_json)?;
-    lua.register_fn(actions::file_exists)?;
+    lua.register_fn(modules::file)?;
+    lua.register_fn(modules::dir)?;
 
     let lua = lua.eval(&code)?;
     lua.execute(&task_refs, opt.run_defaults)?;
