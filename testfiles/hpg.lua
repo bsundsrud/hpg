@@ -39,6 +39,10 @@ task("apt-update", {}, function()
         echo(s)
 end)
 
-task("machine-info", {}, function()
+task("other", function()
+        echo("sure")
+end)
+
+task("machine-info", function()
         echo(machine)
 end)

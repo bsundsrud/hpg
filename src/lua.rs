@@ -4,11 +4,13 @@ use std::{
 };
 
 use crate::{
+    actions::util::action_error,
     error::TaskError,
     tasks::{TaskDefinition, TaskGraphState, TaskRef, TaskResult},
     Result, WRITER,
 };
-use rlua::{Function, Lua, Table, Variadic};
+use anyhow::bail;
+use rlua::{Function, Lua, Table, Value, Variadic};
 
 pub struct LuaState {
     lua: Lua,
@@ -51,16 +53,49 @@ impl LuaState {
             lua_ctx.set_named_registry_value("tasks", task_table)?;
             let task_fn = lua_ctx.create_function(
                 move |ctx,
-                      (task_name, dependencies, maybe_f): (
+                      (task_name, dependencies_or_f, maybe_f): (
                     String,
-                    Vec<String>,
+                    Value,
                     Option<rlua::Function>,
                 )| {
-                    let mut tasks = tasks.lock().unwrap();
-                    tasks.push(TaskDefinition::new(task_name.clone(), dependencies));
                     let table: Table = ctx.named_registry_value("tasks")?;
-                    if let Some(f) = maybe_f {
-                        table.set(task_name, f)?;
+                    match (dependencies_or_f, maybe_f) {
+                        (Value::Table(t), Some(f)) => {
+                            let mut tasks = tasks.lock().unwrap();
+                            let dependencies =
+                                t.sequence_values().collect::<Result<Vec<String>, _>>()?;
+                            tasks.push(TaskDefinition::new(task_name.clone(), dependencies));
+                            table.set(task_name, f)?;
+                        }
+                        (Value::String(s), Some(f)) => {
+                            let mut tasks = tasks.lock().unwrap();
+                            tasks.push(TaskDefinition::new(
+                                task_name.clone(),
+                                vec![s.to_str().unwrap().into()],
+                            ));
+                            table.set(task_name, f)?;
+                        }
+                        (Value::Function(f), None) => {
+                            let mut tasks = tasks.lock().unwrap();
+                            tasks.push(TaskDefinition::new(task_name.clone(), Vec::new()));
+                            table.set(task_name, f)?;
+                        }
+                        (Value::Table(t), None) => {
+                            let mut tasks = tasks.lock().unwrap();
+                            let dependencies =
+                                t.sequence_values().collect::<Result<Vec<String>, _>>()?;
+                            tasks.push(TaskDefinition::new(task_name.clone(), dependencies));
+                        }
+                        (Value::String(s), None) => {
+                            let mut tasks = tasks.lock().unwrap();
+                            tasks.push(TaskDefinition::new(
+                                task_name.clone(),
+                                vec![s.to_str().unwrap().into()],
+                            ));
+                        }
+                        _ => {
+                            return Err(action_error("Invalid signature for task() function"));
+                        }
                     }
                     ctx.set_named_registry_value("tasks", table)?;
                     Ok(())
