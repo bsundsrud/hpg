@@ -3,10 +3,7 @@ use rlua::{Error as LuaError, Lua, Table};
 use crate::{error::TaskError, Result, WRITER};
 use std::{io::Error as IoError, process::Command};
 
-use super::{
-    process::exit_status,
-    util::{io_error, task_error},
-};
+use super::util::{exit_status, io_error, task_error};
 
 #[derive(Debug)]
 struct UserDef {

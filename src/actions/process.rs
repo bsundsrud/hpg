@@ -1,24 +1,12 @@
-use std::{
-    collections::HashMap,
-    io::prelude::*,
-    process::{ExitStatus, Stdio},
-};
+use std::{collections::HashMap, io::prelude::*, process::Stdio};
 
 use rlua::{Lua, Table};
 use tempfile::NamedTempFile;
 
-use super::util::io_error;
+use super::util::{action_error, exit_status, io_error};
+use crate::error::TaskError;
 use crate::Result;
 use crate::WRITER;
-use crate::{actions::util::action_error, error::TaskError};
-use std::os::unix::process::ExitStatusExt;
-
-pub fn exit_status(e: &ExitStatus) -> i32 {
-    match e.code() {
-        Some(c) => c,
-        None => 127 + e.signal().unwrap_or(0),
-    }
-}
 
 struct ProcessOutput {
     status: i32,

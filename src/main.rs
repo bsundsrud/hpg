@@ -64,7 +64,6 @@ fn main() -> Result<()> {
     lua.register_fn(actions::exec)?;
     lua.register_fn(actions::shell)?;
     lua.register_fn(actions::hash_text)?;
-    lua.register_fn(actions::package)?;
     lua.register_fn(actions::cancel)?;
     lua.register_fn(actions::success)?;
     lua.register_fn(actions::user)?;
@@ -74,7 +73,8 @@ fn main() -> Result<()> {
     lua.register_fn(actions::from_json)?;
     lua.register_fn(modules::file)?;
     lua.register_fn(modules::dir)?;
-
+    lua.register_fn(modules::pkg)?;
+    lua.register_fn(modules::machine)?;
     let lua = lua.eval(&code)?;
     lua.execute(&task_refs, opt.run_defaults)?;
 

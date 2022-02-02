@@ -3,12 +3,10 @@ use std::sync::Arc;
 use crate::{error::TaskError, tasks::TaskResult, Result, WRITER};
 mod access;
 mod file;
-mod packages;
 mod process;
 pub(crate) mod util;
 pub use access::{group, group_exists_action, user, user_exists_action};
 pub use file::{from_json, hash_text};
-pub use packages::package;
 pub use process::{exec, shell};
 use rlua::Lua;
 

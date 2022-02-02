@@ -1,12 +1,8 @@
 use std::process::{Command, Output, Stdio};
 
-use crate::{
-    actions::{packages::Version, process::exit_status},
-    error::TaskError,
-    WRITER,
-};
+use crate::{actions::util::exit_status, error::TaskError, WRITER};
 
-use super::{InstallStatus, PackageManager, PackageStatus};
+use super::{InstallStatus, PackageManager, PackageStatus, Version};
 
 pub struct AptManager {}
 
@@ -34,7 +30,7 @@ impl AptManager {
     fn call_dpkg_query(&self, pkg: &str) -> Result<PackageStatus, TaskError> {
         let output = Command::new("dpkg-query")
             .arg("-f")
-            .arg("${status}||${version}")
+            .arg("${db:Status-Status}||${db:Status-Want}||${Version}")
             .arg("-W")
             .arg(pkg)
             .stdout(Stdio::piped())
@@ -59,11 +55,14 @@ impl AptManager {
         let status = parts
             .next()
             .ok_or_else(|| TaskError::ActionError(format!("Bad dpkg-query status: {}", stdout)))?;
+        let desired = parts.next().ok_or_else(|| {
+            TaskError::ActionError(format!("Bad dpkg-query status-want: {}", stdout))
+        })?;
         let version = parts
             .next()
             .ok_or_else(|| TaskError::ActionError(format!("Bad dpkg-query version: {}", stdout)))?;
-        let requested_install = status.starts_with("install");
-        let is_installed = status.ends_with("installed");
+        let requested_install = desired.starts_with("install");
+        let is_installed = status.starts_with("installed");
         if requested_install && is_installed {
             Ok(PackageStatus {
                 package: pkg.into(),

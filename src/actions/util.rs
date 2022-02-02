@@ -3,6 +3,8 @@ use crate::WRITER;
 use nix::unistd::{Gid, Group, Uid, User};
 use rlua::{Context, Table, ToLua};
 use serde_json::{Map, Value};
+use std::os::unix::process::ExitStatusExt;
+use std::process::ExitStatus;
 use std::{convert::TryInto, fs::File, io::prelude::*, io::BufReader, path::Path, sync::Arc};
 
 pub(crate) fn action_error<S: Into<String>>(msg: S) -> rlua::Error {
@@ -166,4 +168,11 @@ pub(crate) fn json_to_lua_value<'lua>(
         }
     };
     Ok(val)
+}
+
+pub(crate) fn exit_status(e: &ExitStatus) -> i32 {
+    match e.code() {
+        Some(c) => c,
+        None => 127 + e.signal().unwrap_or(0),
+    }
 }
