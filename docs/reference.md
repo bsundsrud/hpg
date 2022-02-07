@@ -62,29 +62,40 @@ The following Lua Standard Library modules are included in HPG:
 ### Tasks and Targets
 
 <a id="task"></a>
-`task(name, dependencies, f)` - Define a task with dependencies and a
-function body.
+`task(name, dependencies, f)`
+`task(name, f)`
+`task(name, dependencies)` - Define a task with dependencies and a function body.
 * `name`: String - defining the task name. Task names can be used as Targets.
-* `dependencies`: String sequence - List of tasks that this task depends upon.
+* `dependencies`: Optional String or String Sequence - List of tasks that this task depends upon.
 * `f`: Function() - Optional function body executed when task is executed. Receives
   no arguments, and return type is `nil` or a result, such as
   [`success()`](#success) or [`cancel()`](#cancel). If omitted, function is assumed
   to be successful.
 * Example:
   ```lua
-  task("other", {"root"}, function()
+  task("other", "middle", function()
     echo("other")
   end)
 
-  task("root", {}, function()
+  task("middle", {"rootA", "rootB"})
+
+  task("rootA", function()
     echo("hello")
+  end)
+
+  task("rootB", function()
+    echo("world")
   end)
 
   --[[
   Output of `hpg other`:
-  task [ root ]:
+  task [ rootA ]:
     echo:
       "hello"
+  task [ rootB ]:
+    echo:
+      "world"
+  task [ middle ]:
   task [ other ]:
     echo:
       "other"
@@ -127,36 +138,175 @@ skip any downstream task.
 `fail(reason)` - Call to immediately halt execution and exit with an error.
 * `reason`: String - reason for failure.
 
+### Classes
+
+#### `Dir` Class
+
+Class for handling directories.
+
+<hr>
+
+##### Constructor
+
+`dir(path)` - Return a new `Dir` object. `path` must be a directory, otherwise
+    a runtime error will be raised.
+
+##### `Dir` Methods
+
+<a id="dir-chmod"></a>
+`chmod(mode)` - Change access modifiers for the directory.
+* `mode`: String - Octal file mode (such as `"0644"` or `"0755"`)
+* Returns the `Dir` object for chaining.
+
+<a id="dir-chown"></a>
+`chown(opts)` - Change directory user/group ownership.
+* `opts`: Table
+  * `user`: optional String - User to assign file to.
+  * `group`: optional String - Group to assign file to.
+* Returns the `Dir` object for chaining.
+<a id="mkdir"></a>
+
+<a id="dir-mkdir"></a>
+`mkdir()` - Create a directory and any parent directories, as needed.
+* Returns the `Dir` object for chaining.
+
+<a id="dir-symlink"></a>
+`symlink(src, dst, opts)` - Create a symlink from this directory to the destination.
+* `dst`: String - Destination path of the symlink.
+* Returns the `Dir` object of the new directory.
+
+#### `File` Class
+
+Class for handling files and their contents.
+
+<hr>
+
+##### Constructor
+
+`file(path)` - Returns new `File` object.  `path` must be a file, otherwise a
+    runtime error will be raised.
+
+##### `File` Methods
+
+<a id="file-append"></a>
+`append(destination, options)` - Append to an existing file, without overwriting
+unrelated sections. Appended region will be delimited by marker lines on either
+side, along with the Sha-256 hash of the region.  Will not update the file if
+region is unchanged.
+* `destination`: String - Path to destination file.
+* `options`: Table
+  * `src`: String - Source file to read from. Exclusive with `contents`.
+  * `contents`: String - Text to append.  Exclusive with `src`.
+  * `marker`: String - Text to insert as a region marker.  Use unique comments,
+    according to the file type.
+* Returns a table:
+  * `updated`: boolean, whether or not the section was appended or changed.
+
+<a id="file-append_template"></a>
+`append_template(destination, options)` - Append to an existing file, without overwriting
+    unrelated sections. Evaluates the source as a template. Appended region
+    will be delimited by marker lines on either side, along with the Sha-256 hash
+    of the region.  Will not update the file if region is unchanged.
+* `destination`: String - Path to destination file.
+* `options`: Table
+  * `src`: String - Source file to read from. Exclusive with `contents`.
+  * `contents`: String - Text to append.  Exclusive with `src`.
+  * `marker`: String - Text to insert as a region marker.  Use unique comments,
+    according to the file type.
+  * `context`: optional Table (default `{}`) - Variables available within a template.
+* Returns a table:
+  * `updated`: boolean, whether or not the section was appended or changed.
+
+<a id="file-chmod"></a>
+`chmod(mode)` - Change access modifiers for the file.
+* `mode`: String - Octal file mode (such as `"0644"` or `"0755"`)
+* Returns the `File` object for chaining.
+
+<a id="file-chown"></a>
+`chown(opts)` - Change file user/group ownership.
+* `opts`: Table
+  * `user`: optional String - User to assign file to.
+  * `group`: optional String - Group to assign file to.
+* Returns the `File` object for chaining.
+
+<a id="file-copy"></a>
+`copy(dst)` - Copy file to destination.  Does not change the destination
+    file if source and destination hashes match.
+* `dst`: String - Destination file, relative to current directory.
+* Returns a table:
+  * `updated`: boolean, whether or not the file was changed.
+
+<a id="file-contents"></a>
+`contents()` - Return the contents of the given file as a String.
+* Returns String - the file contents.
+
+<a id="file-exists"></a>
+`exists()` - Return whether or not the given file exists.
+* Returns bool - true if the file exists, false otherwise.
+
+<a id="file-hash"></a>
+`hash()` - Compute the Sha-256 hash of a file.
+* Returns String - the hex string of the full Sha-256 hash.
+
+<a id="file-symlink"></a>
+`symlink(dst)` - Create a symlink.
+* `dst`: String - Destination path of the symlink.
+* Returns the `File` object for the destination.
+
+<a id="file-template"></a>
+`copy(dst, opts)` - Copy file to destination, evaluating it as a template first.
+    Does not change the destination file if source and destination hashes match.
+* `dst`: String - Destination file, relative to current directory.
+* `opts`: optional Table
+  * `context`: optional Table - Variables available within a template.
+* Returns a table:
+  * `updated`: boolean, whether or not the file was changed.
+
+<a id="file-touch"></a>
+`touch(path)` - Create an empty file, if it does not already exist.
+* Returns the `File` object for chaining.
+
+### Modules
+
+#### `pkg` Module - System Package Manager integration
+
+##### `apt` Submodule - Perform apt-get actions
+
+<a id="pkg-apt-update"></a>
+`update(force)` - Update repo list.  Will only update repos once per
+    HPG run unless `force` is `true`.
+* `force` - Optional boolean to force repo update even if it has already
+  happened this run.  Default `false`.
+* Returns boolean - `true` if repos were updated, `false` if not.
+
+<a id="pkg-apt-install"></a>
+`install(packages)` - Install packages with `apt-get`.
+* `packages` - List of packages to install. Either a list of
+    strings like `{ "package1", "package2" }` or a list of Tables with versions,
+    like `{ { name = "package1", version = "1" }, { name = "package2", version = "1.1" } }`.
+
+<a id="pkg-apt-status"></a>
+`status(package)` - Get current status of given package.
+* `package` - name of package to query for.
+* Returns a Table with members `name`, `status`, and `version`.  `status` will be one of
+  `"installed"`, `"notfound"`, `"requested"`, or `"notinstalled"`.
+
+<a id="pkg-apt-remove"></a>
+`remove(packages)` - Remove packages from the system.
+* `packages` - List of package names to remove.
+* Returns a List of Tables with members `name`, `status`, and `version`, one for each
+  package that was requested to be removed.  `status` will be one of `"installed"`,
+  `"notfound"`, `"requested"`, or `"notinstalled"`.
+
 ### Functions
 
-Helper functions to make script-writing easier.
+Helper functions to make script-writing easier, are side-effect free.
 
 <hr>
 
 <a id="echo"></a>
 `echo(value)` - Pretty-prints the Lua value to stdout.
 * `value`: Any - Any Lua value.
-
-<hr>
-
-<a id="file_contents"></a>
-`file_contents(path)` - Return the contents of the given file as a String.
-* `path`: String - Path to the file to read.
-* Returns String - the file contents.
-
-<hr>
-
-<a id="file_exists"></a>
-`file_exists(path)` - Return whether or not the given file exists.
-* `path`: String - Path to the file to check for existence.
-* Returns bool - true if the file exists, false otherwise.
-
-<hr>
-
-<a id="file_hash"></a>
-`file_hash(path)` - Compute the Sha-256 hash of a file.
-* `path`: String - Path to the file to hash.
-* Returns String - the hex string of the full Sha-256 hash.
 
 <hr>
 
@@ -193,57 +343,6 @@ These functions perform some action that may have side effects on the system.
 
 <hr>
 
-<a id="append"></a>
-`append(path, options)` - Append to an existing file, without overwriting
-unrelated sections. Appended region will be delimited by marker lines on either
-side, along with the Sha-256 hash of the region.  Will not update the file if
-region is unchanged.
-* `path`: String - Path to destination file.
-* `options`: Table
-  * `src`: String - Source file to read from. Exclusive with `contents`.
-  * `contents`: String - Text to append.  Exclusive with `src`.
-  * `marker`: String - Text to insert as a region marker.  Use unique comments,
-    according to the file type.
-  * `template`: optional bool (default `false`) - Whether or not to consider
-    `src` or `contents` as a Tera template.
-  * `context`: optional Table (default `{}`) - Variables available within a template.
-* Returns a table:
-  * `updated`: boolean, whether or not the section was appended or changed.
-<hr>
-
-<a id="chmod"></a>
-`chmod(file, mode)` - Change access modifiers for the given file.
-* `file`: String - path to file to be changed.
-* `mode`: String - Octal file mode (such as `"0644"` or `"0755"`)
-
-<hr>
-
-<a id="chown"></a>
-`chown(file, opts)` - Change file user/group ownership.
-* `file`: String - path to file to be changed.
-* `opts`: Table
-  * `user`: optional String - User to assign file to.
-  * `group`: optional String - Group to assign file to.
-
-<hr>
-
-<a id="copy"></a>
-`copy(src, dst, opts)` - Copy files, executing Tera templates if needed.  Does
-not change the destination file if source and destination hashes match.
-* `src`: String - Source file to copy, relative to current directory.
-* `dst`: String - Destination file, relative to current directory.
-* `opts`: optional Table
-  * `template`: optional bool (default `false`) - Whether or not to consider
-    `src` or `contents` as a Tera template.
-  * `context`: optional Table - Variables available within a template.
-  * `mode`: optional String - Octal file mode (such as `"0644"` or `"0755"`).
-  * `user`: optional String - User to assign file to.
-  * `group`: optional String - Group to assign file to.
-* Returns a table:
-  * `updated`: boolean, whether or not the section was appended or changed.
-
-<hr>
-
 <a id="exec"></a>
 `exec(cmd, opts)` - Run an executable as a subprocess.
 * `cmd`: String - Path to executable to run.
@@ -275,34 +374,6 @@ not change the destination file if source and destination hashes match.
 
 <hr>
 
-<a id="mkdir"></a>
-`mkdir(path, opts)` - Create a directory and any parent directories, as need.
-* `path`: String - Directory path to create.
-* `opts`: optional Table
-  * `mode`: optional String - Octal directory mode.
-  * `user`: optional String - User to assign directory to.
-  * `group`: optional String - Group to assign directory to.
-
-<hr>
-
-<a id="packaging"></a>
-`packaging(mgr, opts)` - Perform package management operations.
-* `mgr`: String - Package manager to use. Currently supports `apt` and `pacman`.
-* `opts`: Table
-  * `update`: optional bool (default `false`) - Refresh package lists from distro.
-  * `install`: optional Table - List of packages to install. Either a list of
-    strings like `{ "package1", "package2" }` or a list of Tables with versions,
-    like `{ { name = "package1", version = "1" }, { name = "package2", version = "1.1" } }`.
-  * `remove`: optional Table - List of package names to remove.
-* Returns a Table:
-  * `installed`: Table - List of Tables with installed version info: fields
-    `name`, `status`, and `version`. `status` is one of (`"installed"`,
-    `"notfound"`, `"notinstalled"`, `"requested"`).
-  * `removed`: Table - List of packages removed
-  * `updated`: bool - whether or not a repo update was performed
-
-<hr>
-
 <a id="shell"></a>
 `shell(cmd, opts)` - Run a command via a subshell. Copies `cmd` to a text file
 and executes that file as a shell script.
@@ -324,27 +395,6 @@ and executes that file as a shell script.
   * `status`: Number - Numeric exit status.
   * `stdout`: String - Output sent to stdout.
   * `stderr`: String - Output sent to stderr.
-
-<hr>
-
-<a id="symlink"></a>
-`symlink(src, dst, opts)` - Create a symlink.
-* `src`: String - Source path of the symlink.
-* `dst`: String - Destination path of the symlink.
-* `opts`: optional Table
-  * `mode`: optional String - Octal file mode.
-  * `user`: optional String - User to assign symlink to.
-  * `group`: optional String - Group to assign symlink to.
-
-<hr>
-
-<a id="touch"></a>
-`touch(path, opts)` - Create an empty file, if it does not already exist.
-* `path`: String - Path to file, relative to current directory.
-* `opts`: optional Table
-  * `mode`: optional String - Octal file mode.
-  * `user`: optional String - User to assign symlink to.
-  * `group`: optional String - Group to assign symlink to.
 
 <hr>
 

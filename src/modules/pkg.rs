@@ -33,7 +33,7 @@ fn apt<'lua>(ctx: Context<'lua>) -> Result<Table<'lua>, rlua::Error> {
         };
         if !do_update {
             WRITER.write("update repos: skip");
-            return Ok(());
+            return Ok(do_update);
         }
         let apt = AptManager::new();
         apt.call_update_repos().map_err(util::task_error)?;
@@ -41,7 +41,7 @@ fn apt<'lua>(ctx: Context<'lua>) -> Result<Table<'lua>, rlua::Error> {
             .get::<_, Table>("pkg")?
             .get::<_, Table>("apt")?
             .set("_updated", true)?;
-        Ok(())
+        Ok(do_update)
     })?;
     tbl.set("update", update)?;
 

@@ -46,3 +46,17 @@ end)
 task("machine-info", function()
         echo(machine)
 end)
+
+task("other", "middle", function()
+    echo("other")
+  end)
+
+  task("middle", {"rootA", "rootB"})
+
+  task("rootA", function()
+    echo("hello")
+  end)
+
+  task("rootB", function()
+    echo("world")
+  end)
