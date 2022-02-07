@@ -197,8 +197,7 @@ region is unchanged.
   * `contents`: String - Text to append.  Exclusive with `src`.
   * `marker`: String - Text to insert as a region marker.  Use unique comments,
     according to the file type.
-* Returns a table:
-  * `updated`: boolean, whether or not the section was appended or changed.
+* Returns a boolean, whether or not the section was appended or changed.
 
 <a id="file-append_template"></a>
 `append_template(destination, options)` - Append to an existing file, without overwriting
@@ -212,8 +211,7 @@ region is unchanged.
   * `marker`: String - Text to insert as a region marker.  Use unique comments,
     according to the file type.
   * `context`: optional Table (default `{}`) - Variables available within a template.
-* Returns a table:
-  * `updated`: boolean, whether or not the section was appended or changed.
+* Returns a boolean, whether or not the section was appended or changed.
 
 <a id="file-chmod"></a>
 `chmod(mode)` - Change access modifiers for the file.
@@ -231,8 +229,7 @@ region is unchanged.
 `copy(dst)` - Copy file to destination.  Does not change the destination
     file if source and destination hashes match.
 * `dst`: String - Destination file, relative to current directory.
-* Returns a table:
-  * `updated`: boolean, whether or not the file was changed.
+* Returns a boolean, whether or not the file was changed.
 
 <a id="file-contents"></a>
 `contents()` - Return the contents of the given file as a String.
@@ -256,8 +253,7 @@ region is unchanged.
     Does not change the destination file if source and destination hashes match.
 * `dst`: String - Destination file, relative to current directory.
 * `context`: optional Table - Variables available within a template.
-* Returns a table:
-  * `updated`: boolean, whether or not the file was changed.
+* Returns a boolean, whether or not the file was changed.
 
 <a id="file-touch"></a>
 `touch(path)` - Create an empty file, if it does not already exist.
