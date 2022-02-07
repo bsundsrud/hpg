@@ -225,15 +225,15 @@ region is unchanged.
   * `group`: optional String - Group to assign file to.
 * Returns the `File` object for chaining.
 
+<a id="file-contents"></a>
+`contents()` - Return the contents of the given file as a String.
+* Returns String - the file contents.
+
 <a id="file-copy"></a>
 `copy(dst)` - Copy file to destination.  Does not change the destination
     file if source and destination hashes match.
 * `dst`: String - Destination file, relative to current directory.
 * Returns a boolean, whether or not the file was changed.
-
-<a id="file-contents"></a>
-`contents()` - Return the contents of the given file as a String.
-* Returns String - the file contents.
 
 <a id="file-exists"></a>
 `exists()` - Return whether or not the given file exists.
