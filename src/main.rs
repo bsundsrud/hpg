@@ -50,6 +50,8 @@ struct Opt {
         help = "Run default targets in config"
     )]
     run_defaults: bool,
+    #[structopt(short, long, help = "Show planned execution but do not execute")]
+    show: bool,
     #[structopt(name = "TARGETS", help = "Task names to run")]
     targets: Vec<String>,
 }
@@ -76,7 +78,7 @@ fn main() -> Result<()> {
     lua.register_fn(modules::pkg)?;
     lua.register_fn(modules::machine)?;
     let lua = lua.eval(&code)?;
-    lua.execute(&task_refs, opt.run_defaults)?;
+    lua.execute(&task_refs, opt.run_defaults, opt.show)?;
 
     Ok(())
 }

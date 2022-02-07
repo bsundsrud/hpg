@@ -76,7 +76,7 @@ impl UserData for HpgFile {
             ));
 
             let _g = WRITER.enter("copy");
-
+            let updated: bool;
             if should_update_file(&dst, &src_contents).map_err(util::io_error)? {
                 let mut outfile = OpenOptions::new()
                     .write(true)
@@ -87,10 +87,12 @@ impl UserData for HpgFile {
                 outfile
                     .write_all(src_contents.as_bytes())
                     .map_err(util::io_error)?;
+                updated = true;
             } else {
                 WRITER.write("files matched, skipped");
+                updated = false;
             }
-            Ok(HpgFile::new(dst))
+            Ok(updated)
         });
         methods.add_method(
             "template",
@@ -114,6 +116,7 @@ impl UserData for HpgFile {
 
                 let src_contents = run_template_file(&this.path, template_context)
                     .map_err(|e| util::action_error(e.to_string()))?;
+                let updated: bool;
                 if should_update_file(&dst, &src_contents).map_err(util::io_error)? {
                     let mut outfile = OpenOptions::new()
                         .write(true)
@@ -124,10 +127,12 @@ impl UserData for HpgFile {
                     outfile
                         .write_all(src_contents.as_bytes())
                         .map_err(util::io_error)?;
+                    updated = true;
                 } else {
                     WRITER.write("files matched, skipped");
+                    updated = false;
                 }
-                Ok(HpgFile::new(dst))
+                Ok(updated)
             },
         );
         methods.add_method("symlink", |_, this, dst: String| {
@@ -180,8 +185,8 @@ impl UserData for HpgFile {
                 .get::<_, Option<String>>("marker")?
                 .ok_or_else(|| util::action_error("append: 'marker' is required"))?;
             let content_hash = hash::content_hash(&input);
-            append_to_existing(&this.path, &marker, &input, &content_hash)?;
-            Ok(HpgFile::new(&this.path))
+            let updated = append_to_existing(&this.path, &marker, &input, &content_hash)?;
+            Ok(updated)
         });
 
         methods.add_method("append_template", |ctx, this, opts: Table| {
@@ -221,8 +226,8 @@ impl UserData for HpgFile {
             let input = run_template(&input, template_context)
                 .map_err(|e| util::action_error(e.to_string()))?;
             let content_hash = hash::content_hash(&input);
-            append_to_existing(&this.path, &marker, &input, &content_hash)?;
-            Ok(HpgFile::new(&this.path))
+            let updated = append_to_existing(&this.path, &marker, &input, &content_hash)?;
+            Ok(updated)
         });
     }
 }

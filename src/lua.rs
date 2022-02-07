@@ -154,7 +154,7 @@ impl EvaluatedLuaState {
         Ok(self.graph.execution_for_tasks(tasks)?)
     }
 
-    pub fn execute(&self, tasks: &[TaskRef], run_targets: bool) -> Result<()> {
+    pub fn execute(&self, tasks: &[TaskRef], run_targets: bool, show_plan: bool) -> Result<()> {
         self.lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
             let task_table: Table = lua_ctx.named_registry_value("tasks")?;
             let ordering = if run_targets {
@@ -168,7 +168,11 @@ impl EvaluatedLuaState {
             let _guard = WRITER.enter("tasks");
             let mut results: HashMap<TaskRef, TaskResult> = HashMap::new();
 
-            for task in ordering {
+            for (i, task) in ordering.iter().enumerate() {
+                if show_plan {
+                    WRITER.write(format!("{}: {}", i + 1, task.name().as_ref()));
+                    continue;
+                }
                 WRITER.write(format!("task [ {} ]:", task.name().as_ref()));
                 let _guard = WRITER.enter(task.name().as_ref());
                 let mut parent_failed = false;
