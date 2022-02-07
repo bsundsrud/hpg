@@ -144,8 +144,6 @@ skip any downstream task.
 
 Class for handling directories.
 
-<hr>
-
 ##### Constructor
 
 `dir(path)` - Return a new `Dir` object. `path` must be a directory, otherwise
@@ -175,11 +173,11 @@ Class for handling directories.
 * `dst`: String - Destination path of the symlink.
 * Returns the `Dir` object of the new directory.
 
+<hr>
+
 #### `File` Class
 
 Class for handling files and their contents.
-
-<hr>
 
 ##### Constructor
 
@@ -254,11 +252,10 @@ region is unchanged.
 * Returns the `File` object for the destination.
 
 <a id="file-template"></a>
-`copy(dst, opts)` - Copy file to destination, evaluating it as a template first.
+`template(dst, context)` - Copy file to destination, evaluating it as a template first.
     Does not change the destination file if source and destination hashes match.
 * `dst`: String - Destination file, relative to current directory.
-* `opts`: optional Table
-  * `context`: optional Table - Variables available within a template.
+* `context`: optional Table - Variables available within a template.
 * Returns a table:
   * `updated`: boolean, whether or not the file was changed.
 
