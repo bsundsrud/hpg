@@ -10,6 +10,7 @@ anyhow = "1.0.41"
 lazy_static = "1.4.0"
 nix = "0.23.0"
 petgraph = "0.6.0"
+reqwest = { version = "0.11.9", features = ["rustls-tls", "blocking", "json"], default-features = false }
 rlua = "0.19.0"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.68"
@@ -18,3 +19,4 @@ structopt = { version = "0.3.21", default-features = false }
 tempfile = "3.2.0"
 tera = "1.13.0"
 thiserror = "1.0.25"
+url = "2.2.2"

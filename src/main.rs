@@ -77,6 +77,7 @@ fn main() -> Result<()> {
     lua.register_fn(modules::dir)?;
     lua.register_fn(modules::pkg)?;
     lua.register_fn(modules::machine)?;
+    lua.register_fn(modules::url)?;
     let lua = lua.eval(&code)?;
     lua.execute(&task_refs, opt.run_defaults, opt.show)?;
 
