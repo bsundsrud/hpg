@@ -1,3 +1,4 @@
+pub mod archive;
 pub mod file;
 pub mod machine;
 pub mod net;
