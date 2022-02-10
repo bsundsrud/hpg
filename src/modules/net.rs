@@ -1,4 +1,4 @@
-use crate::{error::TaskError, Result};
+use crate::{error::TaskError, Result, WRITER};
 use reqwest::{
     blocking::{Client, RequestBuilder, Response},
     Error as ReqwestError, IntoUrl, StatusCode, Url,
@@ -65,6 +65,8 @@ impl UserData for HpgUrl {
                 ctx.create_table()?
             };
             let builder = opts_to_request(&client, &this.url, &opts)?;
+            WRITER.write(format!("GET {}", &this.url));
+            let _ = WRITER.enter("net_get");
             let res = builder
                 .send()
                 .map_err(|e| util::action_error(format!("{}", e)))?;
@@ -84,6 +86,8 @@ impl UserData for HpgUrl {
                 ctx.create_table()?
             };
             let builder = opts_to_request(&client, &this.url, &opts)?;
+            WRITER.write(format!("GET JSON {}", &this.url));
+            let _ = WRITER.enter("net_json");
             let res = builder
                 .send()
                 .map_err(|e| util::action_error(format!("{}", e)))?;
@@ -105,6 +109,8 @@ impl UserData for HpgUrl {
                 ctx.create_table()?
             };
             let builder = opts_to_request(&client, &this.url, &opts)?;
+            WRITER.write(format!("Download {} to  {}", &this.url, &dst));
+            let _ = WRITER.enter("net_save");
             let mut res = builder
                 .send()
                 .map_err(|e| util::action_error(format!("{}", e)))?;

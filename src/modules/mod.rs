@@ -5,6 +5,7 @@ pub mod net;
 pub mod packaging;
 pub mod pkg;
 
+pub use archive::archive;
 pub use file::{dir, file};
 pub use machine::machine;
 pub use net::url;
