@@ -27,16 +27,13 @@ impl UserData for HpgFile {
     fn add_methods<'lua, T: rlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
         methods.add_method("contents", |_, this, _: ()| {
             WRITER.write(format!("file_contents {}", &this.path.to_string_lossy()));
-            WRITER.enter("file_contents");
+            let _g = WRITER.enter("file_contents");
 
             let contents = util::read_file(&this.path).map_err(util::io_error)?;
             Ok(contents)
         });
         methods.add_method("exists", |_, this, _: ()| {
-            WRITER.write(format!("file_exists {}", &this.path.to_string_lossy()));
-            WRITER.enter("file_exists");
             let exists = this.path.exists();
-            WRITER.write(format!("{}", exists));
 
             Ok(exists)
         });
@@ -143,15 +140,17 @@ impl UserData for HpgFile {
                 &this.path.to_string_lossy(),
                 &dst.to_string_lossy()
             ));
-            WRITER.enter("symlink_file");
-
+            let _g = WRITER.enter("symlink_file");
+            if dst.exists() {
+                std::fs::remove_file(&dst).map_err(util::io_error)?;
+            }
             symlink(&this.path, &dst).map_err(util::io_error)?;
             Ok(HpgFile::new(dst))
         });
 
         methods.add_method("touch", |_, this, _: ()| {
             WRITER.write(format!("touch {}", &this.path.to_string_lossy()));
-            WRITER.enter("touch");
+            let _g = WRITER.enter("touch");
             let f = OpenOptions::new()
                 .write(true)
                 .create(true)
@@ -236,15 +235,16 @@ impl HpgDir {
     pub fn new<P: Into<PathBuf>>(path: P) -> HpgDir {
         HpgDir { path: path.into() }
     }
+
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
 }
 
 impl UserData for HpgDir {
     fn add_methods<'lua, T: rlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
         methods.add_method("exists", |_, this, _: ()| {
-            WRITER.write(format!("dir_exists {}", &this.path.to_string_lossy()));
-            WRITER.enter("dir_exists");
             let exists = this.path.exists();
-            WRITER.write(format!("{}", exists));
 
             Ok(exists)
         });
@@ -288,6 +288,9 @@ impl UserData for HpgDir {
                 &dst.to_string_lossy()
             ));
             WRITER.enter("symlink_dir");
+            if dst.exists() {
+                std::fs::remove_file(&dst).map_err(util::io_error)?;
+            }
             symlink(&this.path, &dst).map_err(util::io_error)?;
             Ok(HpgFile::new(dst))
         });

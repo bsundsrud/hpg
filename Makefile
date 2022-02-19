@@ -6,3 +6,5 @@ build-aarch64:
 
 build-armhf:
 	cargo build --reledase --target armv7-unknown-linux-musleabihf
+install-x64:
+	install -T target/release/hpg /usr/local/bin/hpg

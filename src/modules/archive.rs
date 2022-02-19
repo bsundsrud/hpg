@@ -11,6 +11,8 @@ use crate::actions::util;
 use crate::error::TaskError;
 use crate::{Result, WRITER};
 
+use super::file::HpgDir;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompressionType {
     Gzip,
@@ -73,6 +75,32 @@ impl HpgArchive {
             ty,
         }
     }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn extract(&self, dst: &Path) -> Result<HpgDir, rlua::Error> {
+        match self.ty {
+            ArchiveType::Zip => extract_zip(&self.path, &dst)?,
+            ArchiveType::Tarball(ty) => extract_tarball(&self.path, &dst, &ty)?,
+        }
+        Ok(HpgDir::new(dst))
+    }
+
+    pub fn guess_archive_type(f: &str) -> Option<ArchiveType> {
+        if f.ends_with(".tar.gz") || f.ends_with(".tgz") {
+            Some(ArchiveType::Tarball(Some(CompressionType::Gzip)))
+        } else if f.ends_with(".tar.bz2") {
+            Some(ArchiveType::Tarball(Some(CompressionType::Bzip2)))
+        } else if f.ends_with(".tar") {
+            Some(ArchiveType::Tarball(None))
+        } else if f.ends_with(".zip") {
+            Some(ArchiveType::Zip)
+        } else {
+            None
+        }
+    }
 }
 
 impl UserData for HpgArchive {
@@ -85,11 +113,7 @@ impl UserData for HpgArchive {
                 &dst.to_string_lossy()
             ));
             let _ = WRITER.enter("archive_extract");
-            match this.ty {
-                ArchiveType::Zip => extract_zip(&this.path, &dst)?,
-                ArchiveType::Tarball(ty) => extract_tarball(&this.path, &dst, &ty)?,
-            }
-            Ok(())
+            this.extract(&dst)
         });
     }
 }
@@ -126,20 +150,6 @@ fn extract_tarball(
     Ok(())
 }
 
-fn guess_archive_type(f: &Path) -> Option<ArchiveType> {
-    if f.ends_with(".tar.gz") || f.ends_with(".tgz") {
-        Some(ArchiveType::Tarball(Some(CompressionType::Gzip)))
-    } else if f.ends_with(".tar.bz2") {
-        Some(ArchiveType::Tarball(Some(CompressionType::Bzip2)))
-    } else if f.ends_with(".tar") {
-        Some(ArchiveType::Tarball(None))
-    } else if f.ends_with(".zip") {
-        Some(ArchiveType::Zip)
-    } else {
-        None
-    }
-}
-
 pub fn archive(lua: &Lua) -> Result<()> {
     lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
         let f = lua_ctx.create_function(|ctx, (path, opts): (String, Option<Table>)| {
@@ -158,12 +168,14 @@ pub fn archive(lua: &Lua) -> Result<()> {
                 (Some("tar"), Some("gz")) => ArchiveType::gzip_tarball(),
                 (Some("tar"), Some("bz2")) => ArchiveType::bzip2_tarball(),
                 (Some("tar"), None) => ArchiveType::plain_tarball(),
-                (None, None) => guess_archive_type(&src).ok_or_else(|| {
-                    util::action_error(format!(
-                        "Couldn't guess the archive type of {}",
-                        &src.to_string_lossy()
-                    ))
-                })?,
+                (None, None) => {
+                    HpgArchive::guess_archive_type(&src.to_string_lossy()).ok_or_else(|| {
+                        util::action_error(format!(
+                            "Couldn't guess the archive type of {}",
+                            &src.to_string_lossy()
+                        ))
+                    })?
+                }
                 _ => return Err(util::action_error("Unknown type/compression combination")),
             };
 

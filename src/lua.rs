@@ -9,7 +9,6 @@ use crate::{
     tasks::{TaskDefinition, TaskGraphState, TaskRef, TaskResult},
     Result, WRITER,
 };
-use anyhow::bail;
 use rlua::{Function, Lua, Table, Value, Variadic};
 
 pub struct LuaState {
@@ -191,7 +190,6 @@ impl EvaluatedLuaState {
                     results.insert(task.name().clone(), TaskResult::Incomplete(None));
                     continue;
                 }
-
                 let maybe_f: Option<Function> = task_table.get(task.name().as_ref())?;
                 if let Some(f) = maybe_f {
                     match f.call(()) {

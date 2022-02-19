@@ -19,40 +19,40 @@ impl HpgUrl {
     pub fn new<U: IntoUrl>(u: U) -> Result<HpgUrl, ReqwestError> {
         Ok(HpgUrl { url: u.into_url()? })
     }
-}
 
-fn opts_to_request<'lua>(
-    client: &Client,
-    url: &Url,
-    opts: &Table<'lua>,
-) -> Result<RequestBuilder, rlua::Error> {
-    let mut builder = client.get(url.clone());
-    if let Some(headers) = opts.get::<_, Option<Table>>("headers")? {
-        for pair in headers.pairs::<String, String>() {
-            let (key, value) = pair?;
-            builder = builder.header(key, value);
+    pub fn opts_to_request<'lua>(
+        &self,
+        client: &Client,
+        opts: &Table<'lua>,
+    ) -> Result<RequestBuilder, rlua::Error> {
+        let mut builder = client.get(self.url.clone());
+        if let Some(headers) = opts.get::<_, Option<Table>>("headers")? {
+            for pair in headers.pairs::<String, String>() {
+                let (key, value) = pair?;
+                builder = builder.header(key, value);
+            }
         }
+        Ok(builder)
     }
-    Ok(builder)
-}
 
-fn validate_response<'lua>(resp: &Response, opts: &Table<'lua>) -> Result<(), rlua::Error> {
-    let expected_response = opts
-        .get::<_, Option<u16>>("expected_response")?
-        .unwrap_or(200);
+    pub fn validate_response<'lua>(resp: &Response, opts: &Table<'lua>) -> Result<(), rlua::Error> {
+        let expected_response = opts
+            .get::<_, Option<u16>>("expected_response")?
+            .unwrap_or(200);
 
-    if resp.status()
-        != StatusCode::from_u16(expected_response).map_err(|_| {
-            util::action_error(format!("Invalid expected status {}", expected_response))
-        })?
-    {
-        return Err(util::action_error(format!(
-            "Invalid response code, got {} expected {}",
-            resp.status().as_u16(),
-            expected_response
-        )));
+        if resp.status()
+            != StatusCode::from_u16(expected_response).map_err(|_| {
+                util::action_error(format!("Invalid expected status {}", expected_response))
+            })?
+        {
+            return Err(util::action_error(format!(
+                "Invalid response code, got {} expected {}",
+                resp.status().as_u16(),
+                expected_response
+            )));
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 impl UserData for HpgUrl {
@@ -64,14 +64,14 @@ impl UserData for HpgUrl {
             } else {
                 ctx.create_table()?
             };
-            let builder = opts_to_request(&client, &this.url, &opts)?;
+            let builder = this.opts_to_request(&client, &opts)?;
             WRITER.write(format!("GET {}", &this.url));
-            let _ = WRITER.enter("net_get");
+            let _g = WRITER.enter("net_get");
             let res = builder
                 .send()
                 .map_err(|e| util::action_error(format!("{}", e)))?;
 
-            validate_response(&res, &opts)?;
+            HpgUrl::validate_response(&res, &opts)?;
 
             Ok(res
                 .text()
@@ -85,14 +85,14 @@ impl UserData for HpgUrl {
             } else {
                 ctx.create_table()?
             };
-            let builder = opts_to_request(&client, &this.url, &opts)?;
+            let builder = this.opts_to_request(&client, &opts)?;
             WRITER.write(format!("GET JSON {}", &this.url));
-            let _ = WRITER.enter("net_json");
+            let _g = WRITER.enter("net_json");
             let res = builder
                 .send()
                 .map_err(|e| util::action_error(format!("{}", e)))?;
 
-            validate_response(&res, &opts)?;
+            HpgUrl::validate_response(&res, &opts)?;
 
             let j: serde_json::Value = res
                 .json()
@@ -108,14 +108,14 @@ impl UserData for HpgUrl {
             } else {
                 ctx.create_table()?
             };
-            let builder = opts_to_request(&client, &this.url, &opts)?;
+            let builder = this.opts_to_request(&client, &opts)?;
             WRITER.write(format!("Download {} to  {}", &this.url, &dst));
-            let _ = WRITER.enter("net_save");
+            let _g = WRITER.enter("net_save");
             let mut res = builder
                 .send()
                 .map_err(|e| util::action_error(format!("{}", e)))?;
 
-            validate_response(&res, &opts)?;
+            HpgUrl::validate_response(&res, &opts)?;
 
             let mut f = OpenOptions::new()
                 .create(true)
