@@ -112,7 +112,7 @@ impl UserData for HpgFile {
                     .map_err(|e| util::action_error(format!("Unable to parse context: {}", e)))?;
 
                 let src_contents = run_template_file(&this.path, template_context)
-                    .map_err(|e| util::action_error(e.to_string()))?;
+                    .map_err(|e| util::task_error(e))?;
                 let updated: bool;
                 if should_update_file(&dst, &src_contents).map_err(util::io_error)? {
                     let mut outfile = OpenOptions::new()
@@ -435,7 +435,7 @@ fn run_template_file(tmpl_path: &Path, context: serde_json::Value) -> Result<Str
         .map_err(|e| TaskError::ActionError(format!("Invalid context: {}", e)))?;
     let tmpl_contents = util::read_file(tmpl_path)?;
     let rendered = tera::Tera::one_off(&tmpl_contents, &ctx, false)
-        .map_err(|e| TaskError::ActionError(format!("Failed to render template: {}", e)))?;
+        .map_err(|e| TaskError::TemplateError(e))?;
     Ok(rendered)
 }
 
@@ -443,6 +443,6 @@ fn run_template(tmpl: &str, context: serde_json::Value) -> Result<String, TaskEr
     let ctx = tera::Context::from_value(context)
         .map_err(|e| TaskError::ActionError(format!("Invalid context: {}", e)))?;
     let rendered = tera::Tera::one_off(&tmpl, &ctx, false)
-        .map_err(|e| TaskError::ActionError(format!("Failed to render template: {}", e)))?;
+        .map_err(|e| TaskError::TemplateError(e))?;
     Ok(rendered)
 }

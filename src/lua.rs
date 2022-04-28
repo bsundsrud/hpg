@@ -208,6 +208,7 @@ impl EvaluatedLuaState {
                         Err(rlua::Error::CallbackError { traceback, cause }) => {
                             if let rlua::Error::ExternalError(ref e) = *cause.clone() {
                                 WRITER.write(format!("{}\n{}", e, traceback));
+                                WRITER.write(format!("Source: {:?}", e.source()))
                             } else {
                                 WRITER.write(format!("{}\n{}", cause, traceback));
                             }

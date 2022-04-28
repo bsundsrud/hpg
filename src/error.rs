@@ -15,6 +15,8 @@ pub enum TaskError {
     ActionError(String),
     #[error("A task was skipped")]
     SkippedTask,
+    #[error("Templating error: {0}")]
+    TemplateError(#[from] tera::Error),
 }
 
 #[derive(Debug, Error)]
