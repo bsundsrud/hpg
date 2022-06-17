@@ -6,21 +6,21 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.41"
-flate2 = "1.0.22"
+anyhow = "1.0.57"
+flate2 = "1.0.24"
 lazy_static = "1.4.0"
-nix = "0.23.0"
-petgraph = "0.6.0"
-reqwest = { version = "0.11.9", features = ["rustls-tls", "blocking", "json"], default-features = false }
-rlua = "0.19.0"
-serde = { version = "1.0.130", features = ["derive"] }
-serde_json = "1.0.68"
-sha2 = "0.9.8"
-structopt = { version = "0.3.21", default-features = false }
+nix = "0.24.1"
+petgraph = "0.6.2"
+reqwest = { version = "0.11.11", features = ["rustls-tls", "blocking", "json"], default-features = false }
+rlua = "0.19.2"
+serde = { version = "1.0.137", features = ["derive"] }
+serde_json = "1.0.81"
+sha2 = "0.10.2"
+structopt = { version = "0.3.26", default-features = false }
 tar = "0.4.38"
-tempfile = "3.2.0"
-tera = "1.13.0"
-thiserror = "1.0.25"
+tempfile = "3.3.0"
+tera = "1.16.0"
+thiserror = "1.0.31"
 url = "2.2.2"
-zbus = "2.2.0"
-zip = "0.5.13"
+zbus = "2.3.1"
+zip = "0.6.2"
