@@ -50,14 +50,42 @@ struct Opt {
         help = "Run default targets in config"
     )]
     run_defaults: bool,
+    #[structopt(
+        long = "lsp-defs",
+        help = "Output LSP definitions for HPG to .meta/hpgdefs.lua.  Compatible with EmmyLua and lua-language-server."
+    )]
+    lsp_defs: bool,
+    #[structopt(
+        long = "raw-lsp-defs",
+        help = "Output LSP definitions for HPG to stdout.  Compatible with EmmyLua and lua-language-server."
+    )]
+    raw_lsp_defs: bool,
     #[structopt(short, long, help = "Show planned execution but do not execute")]
     show: bool,
     #[structopt(name = "TARGETS", help = "Task names to run")]
     targets: Vec<String>,
 }
 
+fn lsp_defs() -> &'static str {
+    include_str!("hpgdefs.lua")
+}
+
 fn main() -> Result<()> {
     let opt = Opt::from_args();
+    if opt.lsp_defs {
+        let path = std::path::PathBuf::from("./.meta");
+        std::fs::create_dir_all(&path)?;
+        let mut f = std::fs::File::options()
+            .create(true)
+            .write(true)
+            .open(path.join("hpgdefs.lua"))?;
+        f.write_all(&lsp_defs().as_bytes())?;
+        return Ok(());
+    }
+    if opt.raw_lsp_defs {
+        println!("{}", lsp_defs());
+        return Ok(());
+    }
     let code = load_file(&opt.config)?;
     let task_refs: Vec<TaskRef> = opt.targets.into_iter().map(TaskRef::new).collect();
     let lua = LuaState::new()?;
@@ -80,6 +108,7 @@ fn main() -> Result<()> {
     lua.register_fn(modules::url)?;
     lua.register_fn(modules::archive)?;
     lua.register_fn(modules::installer)?;
+    lua.register_fn(modules::systemd_service)?;
     let lua = lua.eval(&code)?;
     lua.execute(&task_refs, opt.run_defaults, opt.show)?;
 

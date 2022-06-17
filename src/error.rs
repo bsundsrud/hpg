@@ -17,6 +17,8 @@ pub enum TaskError {
     SkippedTask,
     #[error("Templating error: {0}")]
     TemplateError(#[from] tera::Error),
+    #[error("Dbus error: {0}")]
+    DbusError(#[from] zbus::Error),
 }
 
 #[derive(Debug, Error)]
