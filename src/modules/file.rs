@@ -26,6 +26,10 @@ impl HpgFile {
 
 impl UserData for HpgFile {
     fn add_methods<'lua, T: rlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
+        methods.add_meta_method(MetaMethod::ToString, |_, this, _: ()| {
+            Ok(this.path.to_string_lossy().to_string())
+        });
+
         methods.add_method("contents", |_, this, _: ()| {
             WRITER.write(format!("file_contents {}", &this.path.to_string_lossy()));
             let _g = WRITER.enter("file_contents");
