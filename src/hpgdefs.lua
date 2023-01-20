@@ -36,6 +36,12 @@ function fail(reason) end
 ---@return Dir dir Dir instance
 function dir(path) end
 
+--- Create a Dir object pointing to a user's home directory.
+---- Runtime error raised if user's home directory is not available.
+---@param user string? Optional user to get the home directory for.  If omitted, current effective user is assumed.
+---@return Dir dir Dir instance
+function homedir(user) end
+
 --- Represents a filesystem directory.
 ---@class Dir
 local Dir = {}
