@@ -5,7 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use rlua::{Lua, Table, UserData};
+use nix::unistd::{geteuid, getuid, User};
+use rlua::{Lua, MetaMethod, Table, UserData};
 
 use crate::{actions::util, error::TaskError, hash, Result, WRITER};
 
@@ -258,10 +259,14 @@ impl UserData for HpgDir {
             util::run_chown(&this.path, user, group)?;
             Ok(HpgFile::new(&this.path))
         });
-        methods.add_method("chmod", |_, this, mode: String| {
-            let mode = u32::from_str_radix(&mode, 8)
-                .map_err(|e| util::action_error(format!("Invalid Mode {}: {}", mode, e)))?;
-            WRITER.write(format!("Chmod {} {}", &this.path.to_string_lossy(), mode));
+        methods.add_method("chmod", |_, this, mode_str: String| {
+            let mode = u32::from_str_radix(&mode_str, 8)
+                .map_err(|e| util::action_error(format!("Invalid Mode {}: {}", mode_str, e)))?;
+            WRITER.write(format!(
+                "Chmod {} {}",
+                &this.path.to_string_lossy(),
+                mode_str
+            ));
             let _g = WRITER.enter("chmod");
 
             let f = File::open(&this.path).map_err(util::io_error)?;
@@ -293,6 +298,9 @@ impl UserData for HpgDir {
             }
             symlink(&this.path, &dst).map_err(util::io_error)?;
             Ok(HpgFile::new(dst))
+        });
+        methods.add_meta_method(MetaMethod::ToString, |_, this, _: ()| {
+            Ok(this.path.to_string_lossy().to_string())
         });
     }
 }
@@ -330,6 +338,37 @@ pub fn dir(lua: &Lua) -> Result<()> {
             Ok(HpgDir::new(&p))
         })?;
         lua_ctx.globals().set("dir", f)?;
+        Ok(())
+    })?;
+    Ok(())
+}
+
+pub fn homedir(lua: &Lua) -> Result<()> {
+    lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
+        let f = lua_ctx.create_function(|_, user: Option<String>| {
+            let p = if let Some(username) = user {
+                let u = User::from_name(&username)
+                    .map_err(|e| {
+                        util::action_error(format!("user syscall for {}: {}", &username, e))
+                    })?
+                    .ok_or_else(|| util::action_error(format!("Unknown user {}", &username)))?;
+                u.dir.clone()
+            } else {
+                let euid = geteuid();
+                let u = User::from_uid(euid)
+                    .map_err(|e| util::action_error(format!("uid syscall for {}: {}", &euid, e)))?
+                    .ok_or_else(|| util::action_error(format!("Unknown uid {}", &euid)))?;
+                u.dir.clone()
+            };
+            if p.exists() && p.is_file() {
+                return Err(util::action_error(format!(
+                    "Path {} already exists and is a file",
+                    &p.to_string_lossy()
+                )));
+            }
+            Ok(HpgDir::new(&p))
+        })?;
+        lua_ctx.globals().set("homedir", f)?;
         Ok(())
     })?;
     Ok(())
@@ -442,7 +481,7 @@ fn run_template_file(tmpl_path: &Path, context: serde_json::Value) -> Result<Str
 fn run_template(tmpl: &str, context: serde_json::Value) -> Result<String, TaskError> {
     let ctx = tera::Context::from_value(context)
         .map_err(|e| TaskError::ActionError(format!("Invalid context: {}", e)))?;
-    let rendered = tera::Tera::one_off(&tmpl, &ctx, false)
-        .map_err(|e| TaskError::TemplateError(e))?;
+    let rendered =
+        tera::Tera::one_off(&tmpl, &ctx, false).map_err(|e| TaskError::TemplateError(e))?;
     Ok(rendered)
 }

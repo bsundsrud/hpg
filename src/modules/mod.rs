@@ -8,7 +8,7 @@ pub mod pkg;
 pub mod services;
 
 pub use archive::archive;
-pub use file::{dir, file};
+pub use file::{dir, file, homedir};
 pub use installer::installer;
 pub use machine::machine;
 pub use net::url;

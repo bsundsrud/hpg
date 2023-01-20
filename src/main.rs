@@ -103,6 +103,7 @@ fn main() -> Result<()> {
     lua.register_fn(actions::from_json)?;
     lua.register_fn(modules::file)?;
     lua.register_fn(modules::dir)?;
+    lua.register_fn(modules::homedir)?;
     lua.register_fn(modules::pkg)?;
     lua.register_fn(modules::machine)?;
     lua.register_fn(modules::url)?;
