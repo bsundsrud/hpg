@@ -110,6 +110,7 @@ fn main() -> Result<()> {
     lua.register_fn(modules::archive)?;
     lua.register_fn(modules::installer)?;
     lua.register_fn(modules::systemd_service)?;
+    lua.register_fn(modules::user)?;
     let lua = lua.eval(&code)?;
     lua.execute(&task_refs, opt.run_defaults, opt.show)?;
 

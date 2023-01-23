@@ -91,10 +91,9 @@ local File = {}
 --- Append to an existing file, without overwriting unrelated sections.
 --- Appended region will be delimited by marker lines on either side, along with the SHA-256 hash of the region.
 --- Will not update the file if the region is unchanged.
----@param destination string Path to destination file.
 ---@param options FileAppendOpts Table of append options.
 ---@return boolean changed Whether or not the section was appended or updated.
-function File:append(destination, options) end
+function File:append(options) end
 
 ---@class FileAppendTemplateOpts
 ---@field src string Source file to read from. Exclusive with `contents`.
@@ -106,10 +105,9 @@ function File:append(destination, options) end
 --- Evaluates `options.src` or `options.contents` as a Tera template.
 --- Appended region will be delimited by marker lines on either side, along with the SHA-256 hash of the region.
 --- Will not update the file if the region is unchanged.
----@param destination string Path to destination file.
 ---@param options FileAppendTemplateOpts Table of append options.
 ---@return boolean changed Whether or not the section was appended or updated.
-function File:append_template(destination, options) end
+function File:append_template(options) end
 
 --- Change file modes.
 ---@param mode string Octal file mode (such as "0644" or "0755").
@@ -158,7 +156,7 @@ function File:touch() end
 --- System-wide package management interface.
 ---@class pkg
 ---@field apt Apt
-local pkg = {}
+pkg = {}
 
 --- Apt-get packaging for Debian derivatives.
 ---@class Apt
@@ -166,7 +164,7 @@ pkg.apt = {}
 
 --- Update repo list.
 --- Will only update repos once per HPG run unless `force` is `true`.
----@param force boolean Force a repo update.
+---@param force boolean? Force a repo update.
 ---@return boolean updated Whether or not the repos were updated.
 function pkg.apt.update(force) end
 
@@ -254,7 +252,7 @@ function exec(cmd, opts) end
 --- Create or modify a Unix group.
 ---@param name string Name of group to create/modify.
 ---@param opts GroupOpts? Options for group creation/modification.
-function group(name, opts) end
+function groupmod(name, opts) end
 
 ---@class ShellOpts
 ---@field inherit_env boolean? Inherit environment from this process. Default `true`.
@@ -288,7 +286,20 @@ function shell(cmd, opts) end
 --- Create or modify a user.
 ---@param name string Username of user to create/modify.
 ---@param opts UserOpts Options for user creation.
-function user(name, opts) end
+function usermod(name, opts) end
+
+---@class UserDef
+---@field name string Username
+---@field uid number User ID
+---@field gid number Group ID
+---@field gecos string GECOS field
+---@field home_dir string User home directory
+---@field shell string Login shell for user
+
+--- Get information on an existing user.
+---@param name string? Username to look up.  If omitted, defaults to current effective user
+---@return UserDef userdata Table containing information from /etc/passwd
+function user(name) end
 
 --- System information from uname(2)
 ---@class Uname

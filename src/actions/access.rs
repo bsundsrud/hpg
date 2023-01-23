@@ -6,7 +6,7 @@ use std::{io::Error as IoError, process::Command};
 use super::util::{exit_status, io_error, task_error};
 
 #[derive(Debug)]
-struct UserDef {
+struct UserModDef {
     name: String,
     comment: Option<String>,
     home_dir: Option<String>,
@@ -19,8 +19,8 @@ struct UserDef {
     shell: String,
 }
 
-impl UserDef {
-    fn from_lua<'a>(name: String, opts: Table<'a>) -> Result<UserDef, LuaError> {
+impl UserModDef {
+    fn from_lua<'a>(name: String, opts: Table<'a>) -> Result<UserModDef, LuaError> {
         let comment = opts.get::<_, Option<String>>("comment")?;
         let home_dir = opts.get::<_, Option<String>>("home_dir")?;
         let primary_group = opts.get::<_, Option<String>>("group")?;
@@ -36,7 +36,7 @@ impl UserDef {
         let shell = opts
             .get::<_, Option<String>>("shell")?
             .unwrap_or_else(|| "/usr/bin/nologin".to_string());
-        Ok(UserDef {
+        Ok(UserModDef {
             name,
             comment,
             home_dir,
@@ -52,21 +52,21 @@ impl UserDef {
 }
 
 #[derive(Debug)]
-struct GroupDef {
+struct GroupModDef {
     name: String,
     system: bool,
     gid: Option<u32>,
 }
 
-impl GroupDef {
-    fn from_lua<'a>(name: String, opts: Table<'a>) -> Result<GroupDef, LuaError> {
+impl GroupModDef {
+    fn from_lua<'a>(name: String, opts: Table<'a>) -> Result<GroupModDef, LuaError> {
         let system = opts.get::<_, Option<bool>>("is_system")?.unwrap_or(false);
         let gid = opts.get::<_, Option<u32>>("gid")?;
-        Ok(GroupDef { name, system, gid })
+        Ok(GroupModDef { name, system, gid })
     }
 }
 
-fn create_user(user: UserDef) -> Result<(), TaskError> {
+fn create_user(user: UserModDef) -> Result<(), TaskError> {
     let mut cmd = Command::new("useradd");
     cmd.arg("-s").arg(user.shell);
     if let Some(comment) = user.comment {
@@ -115,7 +115,7 @@ fn create_user(user: UserDef) -> Result<(), TaskError> {
     Ok(())
 }
 
-fn modify_user(user: UserDef) -> Result<(), TaskError> {
+fn modify_user(user: UserModDef) -> Result<(), TaskError> {
     let mut cmd = Command::new("usermod");
     cmd.arg("-s").arg(user.shell);
     if let Some(comment) = user.comment {
@@ -157,7 +157,7 @@ fn user_exists(name: &str) -> Result<bool, IoError> {
     Ok(cmd.status.success())
 }
 
-fn create_group(group: GroupDef) -> Result<(), TaskError> {
+fn create_group(group: GroupModDef) -> Result<(), TaskError> {
     let mut cmd = Command::new("groupadd");
     if let Some(gid) = group.gid {
         cmd.arg("-g").arg(gid.to_string());
@@ -178,7 +178,7 @@ fn create_group(group: GroupDef) -> Result<(), TaskError> {
     Ok(())
 }
 
-fn modify_group(group: GroupDef) -> Result<(), TaskError> {
+fn modify_group(group: GroupModDef) -> Result<(), TaskError> {
     let mut cmd = Command::new("groupmod");
     if let Some(gid) = group.gid {
         cmd.arg("-g").arg(gid.to_string());
@@ -208,14 +208,14 @@ pub fn user(lua: &Lua) -> Result<()> {
         let f = ctx.create_function(|_ctx, (name, opts): (String, Table)| {
             if user_exists(&name).map_err(io_error)? {
                 WRITER.write(format!("Modify user {}", name));
-                modify_user(UserDef::from_lua(name, opts)?).map_err(task_error)?;
+                modify_user(UserModDef::from_lua(name, opts)?).map_err(task_error)?;
             } else {
                 WRITER.write(format!("Create user {}", name));
-                create_user(UserDef::from_lua(name, opts)?).map_err(task_error)?;
+                create_user(UserModDef::from_lua(name, opts)?).map_err(task_error)?;
             }
             Ok(())
         })?;
-        ctx.globals().set("user", f)?;
+        ctx.globals().set("usermod", f)?;
         Ok(())
     })?;
     Ok(())
@@ -245,14 +245,14 @@ pub fn group(lua: &Lua) -> Result<()> {
             };
             if group_exists(&name).map_err(io_error)? {
                 WRITER.write(format!("Modify group {}", name));
-                modify_group(GroupDef::from_lua(name, opts)?).map_err(task_error)?;
+                modify_group(GroupModDef::from_lua(name, opts)?).map_err(task_error)?;
             } else {
                 WRITER.write(format!("Create group {}", name));
-                create_group(GroupDef::from_lua(name, opts)?).map_err(task_error)?;
+                create_group(GroupModDef::from_lua(name, opts)?).map_err(task_error)?;
             }
             Ok(())
         })?;
-        ctx.globals().set("group", f)?;
+        ctx.globals().set("groupmod", f)?;
         Ok(())
     })?;
     Ok(())

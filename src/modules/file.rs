@@ -5,8 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use nix::unistd::{geteuid, getuid, User};
-use rlua::{Lua, MetaMethod, Table, UserData};
+use nix::unistd::{geteuid, User};
+use rlua::{Function, Lua, MetaMethod, Table, UserData, Value};
 
 use crate::{actions::util, error::TaskError, hash, Result, WRITER};
 
@@ -233,6 +233,17 @@ impl UserData for HpgFile {
             let updated = append_to_existing(&this.path, &marker, &input, &content_hash)?;
             Ok(updated)
         });
+        methods.add_meta_method(MetaMethod::ToString, |_, this, _: ()| {
+            Ok(this.path.to_string_lossy().to_string())
+        });
+        methods.add_meta_method(MetaMethod::Concat, |ctx, this, other: Value| {
+            let globals = ctx.globals();
+            let tostring: Function = globals.get("tostring")?;
+            let s = tostring.call::<_, String>(other)?;
+            let mut joined = this.path.to_string_lossy().to_string();
+            joined.push_str(&s);
+            Ok(joined)
+        });
     }
 }
 
@@ -305,6 +316,14 @@ impl UserData for HpgDir {
         });
         methods.add_meta_method(MetaMethod::ToString, |_, this, _: ()| {
             Ok(this.path.to_string_lossy().to_string())
+        });
+        methods.add_meta_method(MetaMethod::Concat, |ctx, this, other: Value| {
+            let globals = ctx.globals();
+            let tostring: Function = globals.get("tostring")?;
+            let s = tostring.call::<_, String>(other)?;
+            let mut joined = this.path.to_string_lossy().to_string();
+            joined.push_str(&s);
+            Ok(joined)
         });
     }
 }

@@ -1,3 +1,4 @@
+pub mod access;
 pub mod archive;
 pub mod file;
 pub mod installer;
@@ -7,6 +8,7 @@ pub mod packaging;
 pub mod pkg;
 pub mod services;
 
+pub use access::user;
 pub use archive::archive;
 pub use file::{dir, file, homedir};
 pub use installer::installer;
