@@ -29,6 +29,8 @@ pub enum HpgError {
     TaskError(#[from] TaskError),
     #[error("File Error: {0}")]
     FileError(#[from] std::io::Error),
+    #[error("Parse Error: {0}")]
+    ParseError(String),
 }
 
 pub(crate) fn action_error<S: Into<String>>(msg: S) -> mlua::Error {

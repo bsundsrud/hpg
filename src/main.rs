@@ -32,6 +32,13 @@ fn load_file(fname: &str) -> Result<String, HpgError> {
     Ok(s)
 }
 
+fn parse_variable(s: &str) -> Result<(String, String)> {
+    let (k, v) = s
+        .split_once("=")
+        .ok_or_else(|| HpgError::ParseError("Invalid Variable: Missing '='".to_string()))?;
+    Ok((k.to_string(), v.to_string()))
+}
+
 #[derive(Debug, StructOpt)]
 #[structopt(name = "hpg", about = "config management tool")]
 struct Opt {
@@ -50,6 +57,14 @@ struct Opt {
         help = "Run default targets in config"
     )]
     run_defaults: bool,
+    #[structopt(
+        short = "v",
+        long = "var",
+        name = "KEY=VALUE",
+        help = "Key-value pairs to add as variables",
+        parse(try_from_str = parse_variable)
+    )]
+    variables: Vec<(String, String)>,
     #[structopt(
         long = "lsp-defs",
         help = "Output LSP definitions for HPG to .meta/hpgdefs.lua.  Compatible with EmmyLua and lua-language-server."
@@ -112,7 +127,8 @@ fn main() -> Result<()> {
     lua.register_fn(modules::systemd_service)?;
     lua.register_fn(modules::user)?;
     let lua = lua.eval(&code)?;
-    lua.execute(&task_refs, opt.run_defaults, opt.show)?;
+    let vars = opt.variables.into_iter().collect();
+    lua.execute(&task_refs, opt.run_defaults, opt.show, vars)?;
 
     Ok(())
 }

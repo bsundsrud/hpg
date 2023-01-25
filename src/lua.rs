@@ -8,16 +8,57 @@ use crate::{
     tasks::{TaskDefinition, TaskGraphState, TaskRef, TaskResult},
     Result, WRITER,
 };
-use mlua::{Function, Lua, LuaOptions, Table, Value, Variadic};
+use mlua::{Error as LuaError, Function, Lua, LuaOptions, Table, Value, Variadic};
 
 pub struct LuaState {
     lua: Lua,
     tasks: Arc<Mutex<Vec<TaskDefinition>>>,
+    variables: Arc<Mutex<Vec<VariableDef>>>,
 }
 
 fn std_lib() -> mlua::StdLib {
     use mlua::StdLib;
     StdLib::TABLE | StdLib::STRING | StdLib::UTF8 | StdLib::MATH | StdLib::PACKAGE
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum VariableType {
+    String,
+    Integer,
+    Float,
+    Boolean,
+}
+#[derive(Debug)]
+struct VariableDef {
+    name: String,
+    ty: VariableType,
+    description: Option<String>,
+    default: Option<VariableInstance>,
+}
+#[derive(Debug)]
+enum VariableInstance {
+    String(String),
+    Integer(i64),
+    Float(f64),
+    Boolean(bool),
+}
+
+impl VariableInstance {
+    fn from_ty_and_value(
+        ty: VariableType,
+        val: &mlua::Value,
+    ) -> Result<VariableInstance, LuaError> {
+        match val {
+            Value::Boolean(b) => Ok(VariableInstance::Boolean(*b)),
+            Value::Integer(i) => Ok(VariableInstance::Integer(*i)),
+            Value::Number(f) => Ok(VariableInstance::Float(*f)),
+            Value::String(s) => Ok(VariableInstance::String(s.to_string_lossy().to_string())),
+            _ => Err(error::action_error(format!(
+                "Declared type ({:?}) and default type differ",
+                ty
+            ))),
+        }
+    }
 }
 
 impl LuaState {
@@ -26,6 +67,7 @@ impl LuaState {
             lua: Lua::new_with(std_lib(), LuaOptions::new())
                 .map_err(|e| error::TaskError::LuaError(e))?,
             tasks: Arc::new(Mutex::new(Vec::new())),
+            variables: Arc::new(Mutex::new(Vec::new())),
         };
         lua.task_defines()?;
         Ok(lua)
@@ -114,6 +156,44 @@ impl LuaState {
         })?;
         globals.set("target", target_fn)?;
 
+        let var_list = self.variables.clone();
+        let variables =
+            self.lua
+                .create_function(|lua, (name, opts): (String, Option<Table>)| {
+                    let l = var_list.lock().unwrap();
+                    let def = if let Some(t) = opts {
+                        let ty = if let Some(ref ty) = t.get::<_, Option<String>>("type")? {
+                            match ty.as_str() {
+                                "string" => VariableType::String,
+                                "int" | "integer" => VariableType::Integer,
+                                "float" => VariableType::Float,
+                                "bool" | "boolean" => VariableType::Boolean,
+                                _ => {
+                                    return Err(error::action_error(format!(
+                                        "Invalid type for variable: {}",
+                                        ty
+                                    )))
+                                }
+                            }
+                        } else {
+                            VariableType::String
+                        };
+
+                        let description = t.get::<_, Option<String>>("description")?;
+                        let def_val = t
+                            .get::<_, Option<mlua::Value>>("default")?
+                            .map(|raw| VariableInstance::from_ty(ty, &raw));
+                    } else {
+                        VariableDef {
+                            name: name.clone(),
+                            ty: VariableType::String,
+                            description: None,
+                            default: None,
+                        }
+                    };
+                    Ok(())
+                })?;
+
         Ok(())
     }
 
@@ -129,12 +209,14 @@ impl LuaState {
         Ok(EvaluatedLuaState {
             lua: self.lua,
             graph,
+            variables: Vec::new(),
         })
     }
 }
 
 pub struct EvaluatedLuaState {
     lua: Lua,
+    variables: Vec<VariableDef>,
     graph: TaskGraphState,
 }
 
@@ -148,6 +230,7 @@ impl EvaluatedLuaState {
         tasks: &[TaskRef],
         run_targets: bool,
         show_plan: bool,
+        variables: HashMap<String, String>,
     ) -> Result<(), TaskError> {
         let task_table: Table = self.lua.named_registry_value("tasks")?;
         let ordering = if run_targets {
