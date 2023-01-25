@@ -4,7 +4,7 @@ use crate::WRITER;
 
 pub(crate) mod apt;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Version(pub String);
 
 #[derive(Debug, Clone)]

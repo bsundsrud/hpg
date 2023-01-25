@@ -4,12 +4,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use mlua::{Lua, Table, UserData};
 use reqwest::Url;
-use rlua::{Lua, Table, UserData};
 
 use super::{archive::HpgArchive, file::HpgDir};
 use crate::Result;
-use crate::{actions::util, error::TaskError, WRITER};
+use crate::{
+    actions::util,
+    error::{self, TaskError},
+    WRITER,
+};
 
 #[derive(Debug)]
 pub enum InstallSource {
@@ -26,11 +30,11 @@ pub struct HpgInstaller {
 }
 
 impl HpgInstaller {
-    fn download(&self) -> Result<PathBuf, rlua::Error> {
+    fn download(&self) -> Result<PathBuf, mlua::Error> {
         let (u, archive_path) = if let InstallSource::Url { url, archive_path } = &self.src {
             (url, archive_path)
         } else {
-            return Err(util::action_error("Called download() on local file"));
+            return Err(error::action_error("Called download() on local file"));
         };
         WRITER.write(format!("Downloading {} to {}", u, archive_path.display()));
         let _g = WRITER.enter("installer_download");
@@ -39,10 +43,10 @@ impl HpgInstaller {
         let builder = client.get(u.clone());
         let mut res = builder
             .send()
-            .map_err(|e| util::action_error(format!("{}", e)))?;
+            .map_err(|e| error::action_error(format!("{}", e)))?;
 
         if !res.status().is_success() {
-            return Err(util::action_error(format!(
+            return Err(error::action_error(format!(
                 "Expected 200 status, received {}",
                 res.status().as_u16()
             )));
@@ -52,15 +56,15 @@ impl HpgInstaller {
             .truncate(true)
             .write(true)
             .open(&archive_path)
-            .map_err(util::io_error)?;
+            .map_err(error::io_error)?;
 
         res.copy_to(&mut f)
-            .map_err(|e| util::action_error(format!("Body Error: {}", e)))?;
+            .map_err(|e| error::action_error(format!("Body Error: {}", e)))?;
 
         Ok(archive_path.to_path_buf())
     }
 
-    fn extract(&self, f: HpgArchive) -> Result<HpgDir, rlua::Error> {
+    fn extract(&self, f: HpgArchive) -> Result<HpgDir, mlua::Error> {
         let dir = f.extract(&self.extract_dir)?;
         if let Some(h) = &self.hash {
             let hash_file = self.install_dir().join(".hpg-hash");
@@ -69,8 +73,8 @@ impl HpgInstaller {
                 .truncate(true)
                 .write(true)
                 .open(&hash_file)
-                .map_err(util::io_error)?;
-            f.write_all(h.as_bytes()).map_err(util::io_error)?;
+                .map_err(error::io_error)?;
+            f.write_all(h.as_bytes()).map_err(error::io_error)?;
         }
         Ok(dir)
     }
@@ -111,13 +115,13 @@ impl HpgInstaller {
         }
     }
 
-    fn install(&self) -> Result<HpgDir, rlua::Error> {
+    fn install(&self) -> Result<HpgDir, mlua::Error> {
         let f = match &self.src {
             InstallSource::Url { url, archive_path } => {
                 let dir = archive_path.parent().ok_or_else(|| {
-                    util::action_error(format!("Invalid archive_path {}", &archive_path.display()))
+                    error::action_error(format!("Invalid archive_path {}", &archive_path.display()))
                 })?;
-                std::fs::create_dir_all(&dir).map_err(util::io_error)?;
+                std::fs::create_dir_all(&dir).map_err(error::io_error)?;
                 WRITER.write(format!("Installing {}", archive_path.display()));
                 let _g = WRITER.enter("installer_install");
                 if self.hash_matches() {
@@ -128,7 +132,7 @@ impl HpgInstaller {
                 if let Some(ty) = HpgArchive::guess_archive_type(url.path()) {
                     HpgArchive::new(archive, ty)
                 } else {
-                    return Err(util::action_error(format!(
+                    return Err(error::action_error(format!(
                         "Couldn't guess archive type of url {}",
                         url.path()
                     )));
@@ -144,7 +148,7 @@ impl HpgInstaller {
                 if let Some(ty) = HpgArchive::guess_archive_type(&f.to_string_lossy()) {
                     HpgArchive::new(&f, ty)
                 } else {
-                    return Err(util::action_error(format!(
+                    return Err(error::action_error(format!(
                         "Couldn't guess archive type of file {}",
                         &f.display()
                     )));
@@ -156,44 +160,41 @@ impl HpgInstaller {
 }
 
 impl UserData for HpgInstaller {
-    fn add_methods<'lua, T: rlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
+    fn add_methods<'lua, T: mlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
         methods.add_method("install", |_, this, _: ()| this.install());
         methods.add_method("is_installed", |_, this, _: ()| Ok(this.hash_matches()));
     }
 }
 
-pub fn installer(lua: &Lua) -> Result<()> {
-    lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
-        let f = lua_ctx.create_function(
-            |_, (archive_path, extract_dir, opts): (String, String, Table)| {
-                let url = opts.get::<_, Option<String>>("url")?;
-                let hash = opts.get::<_, Option<String>>("hash")?;
-                let install_dir = opts.get::<_, Option<String>>("install_dir")?;
-                let extract_dir = Path::new(".").join(extract_dir);
-                let archive_path = Path::new(".").join(archive_path);
+pub fn installer(lua: &Lua) -> Result<(), TaskError> {
+    let f = lua.create_function(
+        |_, (archive_path, extract_dir, opts): (String, String, Table)| {
+            let url = opts.get::<_, Option<String>>("url")?;
+            let hash = opts.get::<_, Option<String>>("hash")?;
+            let install_dir = opts.get::<_, Option<String>>("install_dir")?;
+            let extract_dir = Path::new(".").join(extract_dir);
+            let archive_path = Path::new(".").join(archive_path);
 
-                let install_dir = install_dir.map(|i| Path::new(".").join(i));
+            let install_dir = install_dir.map(|i| Path::new(".").join(i));
 
-                let src = if let Some(u) = url {
-                    InstallSource::Url {
-                        url: Url::parse(&u).map_err(|e| util::action_error(format!("{}", e)))?,
-                        archive_path,
-                    }
-                } else {
-                    InstallSource::File(archive_path)
-                };
+            let src = if let Some(u) = url {
+                InstallSource::Url {
+                    url: Url::parse(&u).map_err(|e| error::action_error(format!("{}", e)))?,
+                    archive_path,
+                }
+            } else {
+                InstallSource::File(archive_path)
+            };
 
-                let i = HpgInstaller {
-                    src,
-                    hash,
-                    extract_dir,
-                    install_dir,
-                };
-                i.install()
-            },
-        )?;
-        lua_ctx.globals().set("install", f)?;
-        Ok(())
-    })?;
+            let i = HpgInstaller {
+                src,
+                hash,
+                extract_dir,
+                install_dir,
+            };
+            i.install()
+        },
+    )?;
+    lua.globals().set("install", f)?;
     Ok(())
 }

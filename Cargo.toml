@@ -12,7 +12,6 @@ lazy_static = "1.4.0"
 nix = "0.26.2"
 petgraph = "0.6.2"
 reqwest = { version = "0.11.14", features = ["rustls-tls", "blocking", "json"], default-features = false }
-rlua = "0.19.4"
 serde = { version = "1.0.152", features = ["derive"] }
 serde_json = "1.0.91"
 sha2 = "0.10.6"
@@ -26,3 +25,4 @@ regex = "1.7.1"
 url = "2.3.1"
 zbus = "3.7.0"
 zip = "0.6.3"
+mlua = { version = "0.8.7", features = ["lua54", "mlua_derive", "vendored"] }

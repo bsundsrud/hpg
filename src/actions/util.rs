@@ -1,23 +1,11 @@
-use crate::error::TaskError;
+use crate::error::{self, TaskError};
 use crate::WRITER;
+use mlua::{Lua, Table, ToLua};
 use nix::unistd::{Gid, Group, Uid, User};
-use rlua::{Context, Table, ToLua};
 use serde_json::{Map, Value};
 use std::os::unix::process::ExitStatusExt;
 use std::process::ExitStatus;
-use std::{convert::TryInto, fs::File, io::prelude::*, io::BufReader, path::Path, sync::Arc};
-
-pub(crate) fn action_error<S: Into<String>>(msg: S) -> rlua::Error {
-    rlua::Error::ExternalError(Arc::new(TaskError::ActionError(msg.into())))
-}
-
-pub(crate) fn task_error(err: TaskError) -> rlua::Error {
-    rlua::Error::ExternalError(Arc::new(err))
-}
-
-pub(crate) fn io_error(e: std::io::Error) -> rlua::Error {
-    rlua::Error::ExternalError(Arc::new(TaskError::IoError(e)))
-}
+use std::{convert::TryInto, fs::File, io::prelude::*, io::BufReader, path::Path};
 
 pub(crate) fn read_file(path: &Path) -> Result<String, std::io::Error> {
     let mut contents = String::new();
@@ -27,48 +15,48 @@ pub(crate) fn read_file(path: &Path) -> Result<String, std::io::Error> {
     Ok(contents)
 }
 
-pub(crate) fn gid_for_value(val: &rlua::Value) -> Result<Gid, rlua::Error> {
+pub(crate) fn gid_for_value(val: &mlua::Value) -> Result<Gid, mlua::Error> {
     match val {
-        rlua::Value::Integer(i) => {
+        mlua::Value::Integer(i) => {
             let gid: u32 = (*i)
                 .try_into()
-                .map_err(|e| action_error(format!("gid value out of range: {}", e)))?;
+                .map_err(|e| error::action_error(format!("gid value out of range: {}", e)))?;
             Ok(Gid::from_raw(gid))
         }
 
-        rlua::Value::String(s) => {
+        mlua::Value::String(s) => {
             let name = s.to_str()?;
             let group = Group::from_name(name)
-                .map_err(|e| action_error(format!("group: {}", e)))?
-                .ok_or_else(|| action_error(format!("gid for {} not found", name)))?;
+                .map_err(|e| error::action_error(format!("group: {}", e)))?
+                .ok_or_else(|| error::action_error(format!("gid for {} not found", name)))?;
             Ok(group.gid)
         }
         _ => {
-            return Err(action_error(
+            return Err(error::action_error(
                 "invalid group type, must be string or integer",
             ));
         }
     }
 }
 
-pub(crate) fn uid_for_value(val: &rlua::Value) -> Result<Uid, rlua::Error> {
+pub(crate) fn uid_for_value(val: &mlua::Value) -> Result<Uid, mlua::Error> {
     match val {
-        rlua::Value::Integer(i) => {
+        mlua::Value::Integer(i) => {
             let uid: u32 = (*i)
                 .try_into()
-                .map_err(|e| action_error(format!("uid value out of range: {}", e)))?;
+                .map_err(|e| error::action_error(format!("uid value out of range: {}", e)))?;
             Ok(Uid::from_raw(uid))
         }
 
-        rlua::Value::String(s) => {
+        mlua::Value::String(s) => {
             let name = s.to_str()?;
             let user = User::from_name(name)
-                .map_err(|e| action_error(format!("user: {}", e)))?
-                .ok_or_else(|| action_error(format!("uid for {} not found", name)))?;
+                .map_err(|e| error::action_error(format!("user: {}", e)))?
+                .ok_or_else(|| error::action_error(format!("uid for {} not found", name)))?;
             Ok(user.uid)
         }
         _ => {
-            return Err(action_error(
+            return Err(error::action_error(
                 "invalid group type, must be string or integer",
             ));
         }
@@ -77,28 +65,28 @@ pub(crate) fn uid_for_value(val: &rlua::Value) -> Result<Uid, rlua::Error> {
 
 pub(crate) fn run_chown(
     p: &Path,
-    user: Option<rlua::Value>,
-    group: Option<rlua::Value>,
-) -> Result<(), rlua::Error> {
+    user: Option<mlua::Value>,
+    group: Option<mlua::Value>,
+) -> Result<(), mlua::Error> {
     match (user, group) {
         (None, None) => {}
         (None, Some(g)) => {
             let gid = gid_for_value(&g)?;
             nix::unistd::chown(p, None, Some(gid))
-                .map_err(|e| action_error(format!("chown: {}", e)))?;
+                .map_err(|e| error::action_error(format!("chown: {}", e)))?;
             WRITER.write(format!("gid: {}", gid));
         }
         (Some(u), None) => {
             let uid = uid_for_value(&u)?;
             nix::unistd::chown(p, Some(uid), None)
-                .map_err(|e| action_error(format!("chown: {}", e)))?;
+                .map_err(|e| error::action_error(format!("chown: {}", e)))?;
             WRITER.write(format!("uid: {}", uid));
         }
         (Some(u), Some(g)) => {
             let uid = uid_for_value(&u)?;
             let gid = gid_for_value(&g)?;
             nix::unistd::chown(p, Some(uid), Some(gid))
-                .map_err(|e| action_error(format!("chown: {}", e)))?;
+                .map_err(|e| error::action_error(format!("chown: {}", e)))?;
             WRITER.write(format!("uid: {}", uid));
             WRITER.write(format!("gid: {}", gid));
         }
@@ -107,7 +95,7 @@ pub(crate) fn run_chown(
 }
 
 pub(crate) fn lua_table_to_json<'lua>(tbl: Table<'lua>) -> Result<Value, TaskError> {
-    use rlua::Value as LuaValue;
+    use mlua::Value as LuaValue;
     use serde_json::Value as JsonValue;
 
     let mut map: Map<String, JsonValue> = Map::new();
@@ -137,11 +125,8 @@ pub(crate) fn lua_table_to_json<'lua>(tbl: Table<'lua>) -> Result<Value, TaskErr
     Ok(Value::Object(map))
 }
 
-pub(crate) fn json_to_lua_value<'lua>(
-    ctx: Context<'lua>,
-    json: Value,
-) -> Result<rlua::Value<'lua>, rlua::Error> {
-    use rlua::Value as LuaValue;
+pub(crate) fn json_to_lua_value(ctx: &Lua, json: Value) -> Result<mlua::Value, mlua::Error> {
+    use mlua::Value as LuaValue;
 
     let val = match json {
         Value::Null => LuaValue::Nil,

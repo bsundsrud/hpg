@@ -5,10 +5,9 @@ use std::path::{Path, PathBuf};
 use tar::Archive;
 use zip::ZipArchive;
 
-use rlua::{Lua, Table, UserData};
+use mlua::{Lua, Table, UserData};
 
-use crate::actions::util;
-use crate::error::TaskError;
+use crate::error::{self, TaskError};
 use crate::{Result, WRITER};
 
 use super::file::HpgDir;
@@ -76,11 +75,7 @@ impl HpgArchive {
         }
     }
 
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    pub fn extract(&self, dst: &Path) -> Result<HpgDir, rlua::Error> {
+    pub fn extract(&self, dst: &Path) -> Result<HpgDir, mlua::Error> {
         match self.ty {
             ArchiveType::Zip => extract_zip(&self.path, &dst)?,
             ArchiveType::Tarball(ty) => extract_tarball(&self.path, &dst, &ty)?,
@@ -104,7 +99,7 @@ impl HpgArchive {
 }
 
 impl UserData for HpgArchive {
-    fn add_methods<'lua, T: rlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
+    fn add_methods<'lua, T: mlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
         methods.add_method("extract", |_ctx, this, dst: String| {
             let dst = Path::new(".").join(&dst);
             WRITER.write(format!(
@@ -118,13 +113,13 @@ impl UserData for HpgArchive {
     }
 }
 
-fn extract_zip(src: &Path, dst: &Path) -> Result<(), rlua::Error> {
-    let f = File::open(&src).map_err(util::io_error)?;
+fn extract_zip(src: &Path, dst: &Path) -> Result<(), mlua::Error> {
+    let f = File::open(&src).map_err(error::io_error)?;
     let mut archive =
-        ZipArchive::new(&f).map_err(|e| util::action_error(format!("Zip Error: {}", e)))?;
+        ZipArchive::new(&f).map_err(|e| error::action_error(format!("Zip Error: {}", e)))?;
     archive
         .extract(&dst)
-        .map_err(|e| util::action_error(format!("Zip Error: {}", e)))?;
+        .map_err(|e| error::action_error(format!("Zip Error: {}", e)))?;
     Ok(())
 }
 
@@ -132,58 +127,55 @@ fn extract_tarball(
     src: &Path,
     dst: &Path,
     ty: &Option<CompressionType>,
-) -> Result<(), rlua::Error> {
-    let f = File::open(&src).map_err(util::io_error)?;
+) -> Result<(), mlua::Error> {
+    let f = File::open(&src).map_err(error::io_error)?;
     match *ty {
         Some(CompressionType::Gzip) => {
             let tar = GzDecoder::new(f);
             let mut archive = Archive::new(tar);
-            archive.unpack(&dst).map_err(util::io_error)?;
+            archive.unpack(&dst).map_err(error::io_error)?;
         }
         Some(CompressionType::Bzip2) => unimplemented!(),
         None => {
             let mut archive = Archive::new(f);
-            archive.unpack(&dst).map_err(util::io_error)?;
+            archive.unpack(&dst).map_err(error::io_error)?;
         }
     }
 
     Ok(())
 }
 
-pub fn archive(lua: &Lua) -> Result<()> {
-    lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
-        let f = lua_ctx.create_function(|ctx, (path, opts): (String, Option<Table>)| {
-            let opts = if let Some(o) = opts {
-                o
-            } else {
-                ctx.create_table()?
-            };
-            let ty = opts.get::<_, Option<String>>("type")?;
-            let ty_ref = ty.as_ref().map(|s| s.as_str());
-            let compression = opts.get::<_, Option<String>>("compression")?;
-            let comp_ref = compression.as_ref().map(|s| s.as_str());
-            let src = Path::new(".").join(&path);
-            let archive_ty = match (ty_ref, comp_ref) {
-                (Some("zip"), _) => ArchiveType::zip(),
-                (Some("tar"), Some("gz")) => ArchiveType::gzip_tarball(),
-                (Some("tar"), Some("bz2")) => ArchiveType::bzip2_tarball(),
-                (Some("tar"), None) => ArchiveType::plain_tarball(),
-                (None, None) => {
-                    HpgArchive::guess_archive_type(&src.to_string_lossy()).ok_or_else(|| {
-                        util::action_error(format!(
-                            "Couldn't guess the archive type of {}",
-                            &src.to_string_lossy()
-                        ))
-                    })?
-                }
-                _ => return Err(util::action_error("Unknown type/compression combination")),
-            };
+pub fn archive(lua: &Lua) -> Result<(), TaskError> {
+    let f = lua.create_function(|ctx, (path, opts): (String, Option<Table>)| {
+        let opts = if let Some(o) = opts {
+            o
+        } else {
+            ctx.create_table()?
+        };
+        let ty = opts.get::<_, Option<String>>("type")?;
+        let ty_ref = ty.as_ref().map(|s| s.as_str());
+        let compression = opts.get::<_, Option<String>>("compression")?;
+        let comp_ref = compression.as_ref().map(|s| s.as_str());
+        let src = Path::new(".").join(&path);
+        let archive_ty = match (ty_ref, comp_ref) {
+            (Some("zip"), _) => ArchiveType::zip(),
+            (Some("tar"), Some("gz")) => ArchiveType::gzip_tarball(),
+            (Some("tar"), Some("bz2")) => ArchiveType::bzip2_tarball(),
+            (Some("tar"), None) => ArchiveType::plain_tarball(),
+            (None, None) => {
+                HpgArchive::guess_archive_type(&src.to_string_lossy()).ok_or_else(|| {
+                    error::action_error(format!(
+                        "Couldn't guess the archive type of {}",
+                        &src.to_string_lossy()
+                    ))
+                })?
+            }
+            _ => return Err(error::action_error("Unknown type/compression combination")),
+        };
 
-            Ok(HpgArchive::new(&path, archive_ty))
-        })?;
-
-        lua_ctx.globals().set("archive", f)?;
-        Ok(())
+        Ok(HpgArchive::new(&path, archive_ty))
     })?;
+
+    lua.globals().set("archive", f)?;
     Ok(())
 }

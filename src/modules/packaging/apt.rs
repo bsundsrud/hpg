@@ -42,7 +42,7 @@ impl AptManager {
             if stderr.contains("no packages found") {
                 return Ok(PackageStatus {
                     package: pkg.into(),
-                    status: InstallStatus::NotInstalled,
+                    status: InstallStatus::NotFound,
                 });
             }
             return Err(TaskError::ActionError(format!(

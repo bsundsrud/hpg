@@ -25,7 +25,7 @@ impl Debug for Target {
         }
     }
 }
-
+#[allow(dead_code)]
 #[derive(Debug)]
 struct WriterContext {
     name: String,

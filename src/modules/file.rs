@@ -5,10 +5,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use mlua::{Function, Lua, MetaMethod, Table, UserData, Value};
 use nix::unistd::{geteuid, User};
-use rlua::{Function, Lua, MetaMethod, Table, UserData, Value};
 
-use crate::{actions::util, error::TaskError, hash, Result, WRITER};
+use crate::{
+    actions::util,
+    error::{self, TaskError},
+    hash, Result, WRITER,
+};
 
 pub struct HpgFile {
     path: PathBuf,
@@ -25,7 +29,7 @@ impl HpgFile {
 }
 
 impl UserData for HpgFile {
-    fn add_methods<'lua, T: rlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
+    fn add_methods<'lua, T: mlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
         methods.add_meta_method(MetaMethod::ToString, |_, this, _: ()| {
             Ok(this.path.to_string_lossy().to_string())
         });
@@ -34,7 +38,7 @@ impl UserData for HpgFile {
             WRITER.write(format!("file_contents {}", &this.path.to_string_lossy()));
             let _g = WRITER.enter("file_contents");
 
-            let contents = util::read_file(&this.path).map_err(util::io_error)?;
+            let contents = util::read_file(&this.path).map_err(error::io_error)?;
             Ok(contents)
         });
         methods.add_method("exists", |_, this, _: ()| {
@@ -43,11 +47,11 @@ impl UserData for HpgFile {
             Ok(exists)
         });
         methods.add_method("hash", |_, this, _: ()| {
-            hash::file_hash(&this.path).map_err(util::io_error)
+            hash::file_hash(&this.path).map_err(error::io_error)
         });
         methods.add_method("chown", |_, this, opts: Table| {
-            let user: Option<rlua::Value> = opts.get("user")?;
-            let group: Option<rlua::Value> = opts.get("group")?;
+            let user: Option<mlua::Value> = opts.get("user")?;
+            let group: Option<mlua::Value> = opts.get("group")?;
             WRITER.write(format!("Chown {}:", &this.path.to_string_lossy()));
             let _g = WRITER.enter("chown");
 
@@ -56,18 +60,18 @@ impl UserData for HpgFile {
         });
         methods.add_method("chmod", |_, this, mode: String| {
             let mode = u32::from_str_radix(&mode, 8)
-                .map_err(|e| util::action_error(format!("Invalid Mode {}: {}", mode, e)))?;
+                .map_err(|e| error::action_error(format!("Invalid Mode {}: {}", mode, e)))?;
             WRITER.write(format!("Chmod {} {}", &this.path.to_string_lossy(), mode));
             let _g = WRITER.enter("chmod");
 
-            let f = File::open(&this.path).map_err(util::io_error)?;
+            let f = File::open(&this.path).map_err(error::io_error)?;
             f.set_permissions(Permissions::from_mode(mode))
-                .map_err(util::io_error)?;
+                .map_err(error::io_error)?;
 
             Ok(HpgFile::new(&this.path))
         });
         methods.add_method("copy", |_, this, dst: String| {
-            let src_contents = util::read_file(&this.path).map_err(util::io_error)?;
+            let src_contents = util::read_file(&this.path).map_err(error::io_error)?;
             let cwd = Path::new(".");
             let dst = cwd.join(&dst);
 
@@ -79,16 +83,16 @@ impl UserData for HpgFile {
 
             let _g = WRITER.enter("copy");
             let updated: bool;
-            if should_update_file(&dst, &src_contents).map_err(util::io_error)? {
+            if should_update_file(&dst, &src_contents).map_err(error::io_error)? {
                 let mut outfile = OpenOptions::new()
                     .write(true)
                     .create(true)
                     .truncate(true)
                     .open(&dst)
-                    .map_err(util::io_error)?;
+                    .map_err(error::io_error)?;
                 outfile
                     .write_all(src_contents.as_bytes())
-                    .map_err(util::io_error)?;
+                    .map_err(error::io_error)?;
                 updated = true;
             } else {
                 WRITER.write("files matched, skipped");
@@ -114,21 +118,21 @@ impl UserData for HpgFile {
                     ctx.create_table()?
                 };
                 let template_context = util::lua_table_to_json(template_context)
-                    .map_err(|e| util::action_error(format!("Unable to parse context: {}", e)))?;
+                    .map_err(|e| error::action_error(format!("Unable to parse context: {}", e)))?;
 
                 let src_contents = run_template_file(&this.path, template_context)
-                    .map_err(|e| util::task_error(e))?;
+                    .map_err(|e| error::task_error(e))?;
                 let updated: bool;
-                if should_update_file(&dst, &src_contents).map_err(util::io_error)? {
+                if should_update_file(&dst, &src_contents).map_err(error::io_error)? {
                     let mut outfile = OpenOptions::new()
                         .write(true)
                         .create(true)
                         .truncate(true)
                         .open(&dst)
-                        .map_err(util::io_error)?;
+                        .map_err(error::io_error)?;
                     outfile
                         .write_all(src_contents.as_bytes())
-                        .map_err(util::io_error)?;
+                        .map_err(error::io_error)?;
                     updated = true;
                 } else {
                     WRITER.write("files matched, skipped");
@@ -147,9 +151,9 @@ impl UserData for HpgFile {
             ));
             let _g = WRITER.enter("symlink_file");
             if dst.exists() {
-                std::fs::remove_file(&dst).map_err(util::io_error)?;
+                std::fs::remove_file(&dst).map_err(error::io_error)?;
             }
-            symlink(&this.path, &dst).map_err(util::io_error)?;
+            symlink(&this.path, &dst).map_err(error::io_error)?;
             Ok(HpgFile::new(dst))
         });
 
@@ -160,7 +164,7 @@ impl UserData for HpgFile {
                 .write(true)
                 .create(true)
                 .open(&this.path)
-                .map_err(util::io_error)?;
+                .map_err(error::io_error)?;
             drop(f);
             Ok(HpgFile::new(&this.path))
         });
@@ -173,21 +177,21 @@ impl UserData for HpgFile {
             let contents = opts.get::<_, Option<String>>("contents")?;
             let input = match (src, contents) {
                 (None, None) => {
-                    return Err(util::action_error(
+                    return Err(error::action_error(
                         "append: Must specify one of 'src' or 'contents'",
                     ))
                 }
                 (None, Some(s)) => s,
-                (Some(path), None) => util::read_file(Path::new(&path)).map_err(util::io_error)?,
+                (Some(path), None) => util::read_file(Path::new(&path)).map_err(error::io_error)?,
                 (Some(_), Some(_)) => {
-                    return Err(util::action_error(
+                    return Err(error::action_error(
                         "append: Must specify only one of 'src' or 'contents'",
                     ))
                 }
             };
             let marker = opts
                 .get::<_, Option<String>>("marker")?
-                .ok_or_else(|| util::action_error("append: 'marker' is required"))?;
+                .ok_or_else(|| error::action_error("append: 'marker' is required"))?;
             let content_hash = hash::content_hash(&input);
             let updated = append_to_existing(&this.path, &marker, &input, &content_hash)?;
             Ok(updated)
@@ -204,21 +208,21 @@ impl UserData for HpgFile {
 
             let input = match (src, contents) {
                 (None, None) => {
-                    return Err(util::action_error(
+                    return Err(error::action_error(
                         "append: Must specify one of 'src' or 'contents'",
                     ))
                 }
                 (None, Some(s)) => s,
-                (Some(path), None) => util::read_file(Path::new(&path)).map_err(util::io_error)?,
+                (Some(path), None) => util::read_file(Path::new(&path)).map_err(error::io_error)?,
                 (Some(_), Some(_)) => {
-                    return Err(util::action_error(
+                    return Err(error::action_error(
                         "append: Must specify only one of 'src' or 'contents'",
                     ))
                 }
             };
             let marker = opts
                 .get::<_, Option<String>>("marker")?
-                .ok_or_else(|| util::action_error("append: 'marker' is required"))?;
+                .ok_or_else(|| error::action_error("append: 'marker' is required"))?;
             let template_context = opts.get::<_, Option<Table>>("context")?;
             let template_context = if let Some(c) = template_context {
                 c
@@ -226,9 +230,9 @@ impl UserData for HpgFile {
                 ctx.create_table()?
             };
             let template_context = util::lua_table_to_json(template_context)
-                .map_err(|e| util::action_error(format!("Unable to parse context: {}", e)))?;
+                .map_err(|e| error::action_error(format!("Unable to parse context: {}", e)))?;
             let input = run_template(&input, template_context)
-                .map_err(|e| util::action_error(e.to_string()))?;
+                .map_err(|e| error::action_error(e.to_string()))?;
             let content_hash = hash::content_hash(&input);
             let updated = append_to_existing(&this.path, &marker, &input, &content_hash)?;
             Ok(updated)
@@ -251,14 +255,10 @@ impl HpgDir {
     pub fn new<P: Into<PathBuf>>(path: P) -> HpgDir {
         HpgDir { path: path.into() }
     }
-
-    pub(crate) fn path(&self) -> &Path {
-        &self.path
-    }
 }
 
 impl UserData for HpgDir {
-    fn add_methods<'lua, T: rlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
+    fn add_methods<'lua, T: mlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
         methods.add_method("exists", |_, this, _: ()| {
             let exists = this.path.exists();
 
@@ -266,8 +266,8 @@ impl UserData for HpgDir {
         });
 
         methods.add_method("chown", |_, this, opts: Table| {
-            let user: Option<rlua::Value> = opts.get("user")?;
-            let group: Option<rlua::Value> = opts.get("group")?;
+            let user: Option<mlua::Value> = opts.get("user")?;
+            let group: Option<mlua::Value> = opts.get("group")?;
             WRITER.write(format!("Chown {}:", &this.path.to_string_lossy()));
             let _g = WRITER.enter("chown");
 
@@ -276,7 +276,7 @@ impl UserData for HpgDir {
         });
         methods.add_method("chmod", |_, this, mode_str: String| {
             let mode = u32::from_str_radix(&mode_str, 8)
-                .map_err(|e| util::action_error(format!("Invalid Mode {}: {}", mode_str, e)))?;
+                .map_err(|e| error::action_error(format!("Invalid Mode {}: {}", mode_str, e)))?;
             WRITER.write(format!(
                 "Chmod {} {}",
                 &this.path.to_string_lossy(),
@@ -284,9 +284,9 @@ impl UserData for HpgDir {
             ));
             let _g = WRITER.enter("chmod");
 
-            let f = File::open(&this.path).map_err(util::io_error)?;
+            let f = File::open(&this.path).map_err(error::io_error)?;
             f.set_permissions(Permissions::from_mode(mode))
-                .map_err(util::io_error)?;
+                .map_err(error::io_error)?;
 
             Ok(HpgFile::new(&this.path))
         });
@@ -295,7 +295,7 @@ impl UserData for HpgDir {
             WRITER.write(format!("mkdir {}", &this.path.to_string_lossy()));
             WRITER.enter("mkdir");
 
-            std::fs::create_dir_all(&this.path).map_err(util::io_error)?;
+            std::fs::create_dir_all(&this.path).map_err(error::io_error)?;
             Ok(HpgDir::new(&this.path))
         });
 
@@ -309,9 +309,9 @@ impl UserData for HpgDir {
             ));
             WRITER.enter("symlink_dir");
             if dst.exists() {
-                std::fs::remove_file(&dst).map_err(util::io_error)?;
+                std::fs::remove_file(&dst).map_err(error::io_error)?;
             }
-            symlink(&this.path, &dst).map_err(util::io_error)?;
+            symlink(&this.path, &dst).map_err(error::io_error)?;
             Ok(HpgFile::new(dst))
         });
         methods.add_meta_method(MetaMethod::ToString, |_, this, _: ()| {
@@ -328,72 +328,61 @@ impl UserData for HpgDir {
     }
 }
 
-pub fn file(lua: &Lua) -> Result<()> {
-    lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
-        let f = lua_ctx.create_function(|_, path: String| {
-            let cwd = Path::new(".");
-            let p = cwd.join(&path);
-            if p.exists() && !p.is_file() {
-                return Err(util::action_error(format!(
-                    "Path {} already exists and is not a file",
-                    &p.to_string_lossy()
-                )));
-            }
-            Ok(HpgFile::new(&p))
-        })?;
-        lua_ctx.globals().set("file", f)?;
-        Ok(())
+pub fn file(lua: &Lua) -> Result<(), TaskError> {
+    let f = lua.create_function(|_, path: String| {
+        let cwd = Path::new(".");
+        let p = cwd.join(&path);
+        if p.exists() && !p.is_file() {
+            return Err(error::action_error(format!(
+                "Path {} already exists and is not a file",
+                &p.to_string_lossy()
+            )));
+        }
+        Ok(HpgFile::new(&p))
     })?;
+    lua.globals().set("file", f)?;
     Ok(())
 }
 
-pub fn dir(lua: &Lua) -> Result<()> {
-    lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
-        let f = lua_ctx.create_function(|_, path: String| {
-            let cwd = Path::new(".");
-            let p = cwd.join(&path);
-            if p.exists() && p.is_file() {
-                return Err(util::action_error(format!(
-                    "Path {} already exists and is a file",
-                    &p.to_string_lossy()
-                )));
-            }
-            Ok(HpgDir::new(&p))
-        })?;
-        lua_ctx.globals().set("dir", f)?;
-        Ok(())
+pub fn dir(lua: &Lua) -> Result<(), TaskError> {
+    let f = lua.create_function(|_, path: String| {
+        let cwd = Path::new(".");
+        let p = cwd.join(&path);
+        if p.exists() && p.is_file() {
+            return Err(error::action_error(format!(
+                "Path {} already exists and is a file",
+                &p.to_string_lossy()
+            )));
+        }
+        Ok(HpgDir::new(&p))
     })?;
+    lua.globals().set("dir", f)?;
     Ok(())
 }
 
-pub fn homedir(lua: &Lua) -> Result<()> {
-    lua.context::<_, Result<(), TaskError>>(|lua_ctx| {
-        let f = lua_ctx.create_function(|_, user: Option<String>| {
-            let p = if let Some(username) = user {
-                let u = User::from_name(&username)
-                    .map_err(|e| {
-                        util::action_error(format!("user syscall for {}: {}", &username, e))
-                    })?
-                    .ok_or_else(|| util::action_error(format!("Unknown user {}", &username)))?;
-                u.dir.clone()
-            } else {
-                let euid = geteuid();
-                let u = User::from_uid(euid)
-                    .map_err(|e| util::action_error(format!("uid syscall for {}: {}", &euid, e)))?
-                    .ok_or_else(|| util::action_error(format!("Unknown uid {}", &euid)))?;
-                u.dir.clone()
-            };
-            if p.exists() && p.is_file() {
-                return Err(util::action_error(format!(
-                    "Path {} already exists and is a file",
-                    &p.to_string_lossy()
-                )));
-            }
-            Ok(HpgDir::new(&p))
-        })?;
-        lua_ctx.globals().set("homedir", f)?;
-        Ok(())
+pub fn homedir(lua: &Lua) -> Result<(), TaskError> {
+    let f = lua.create_function(|_, user: Option<String>| {
+        let p = if let Some(username) = user {
+            let u = User::from_name(&username)
+                .map_err(|e| error::action_error(format!("user syscall for {}: {}", &username, e)))?
+                .ok_or_else(|| error::action_error(format!("Unknown user {}", &username)))?;
+            u.dir.clone()
+        } else {
+            let euid = geteuid();
+            let u = User::from_uid(euid)
+                .map_err(|e| error::action_error(format!("uid syscall for {}: {}", &euid, e)))?
+                .ok_or_else(|| error::action_error(format!("Unknown uid {}", &euid)))?;
+            u.dir.clone()
+        };
+        if p.exists() && p.is_file() {
+            return Err(error::action_error(format!(
+                "Path {} already exists and is a file",
+                &p.to_string_lossy()
+            )));
+        }
+        Ok(HpgDir::new(&p))
     })?;
+    lua.globals().set("homedir", f)?;
     Ok(())
 }
 
@@ -402,7 +391,7 @@ fn append_to_existing(
     marker: &str,
     content: &str,
     hash: &str,
-) -> Result<bool, rlua::Error> {
+) -> Result<bool, mlua::Error> {
     let updated;
     if !dst.exists() {
         let contents = format!("{} {}\n{}\n{} {}\n", marker, hash, content, marker, hash);
@@ -411,13 +400,13 @@ fn append_to_existing(
             .write(true)
             .truncate(true)
             .open(&dst)
-            .map_err(util::io_error)?;
+            .map_err(error::io_error)?;
         outfile
             .write_all(contents.as_bytes())
-            .map_err(util::io_error)?;
+            .map_err(error::io_error)?;
         updated = true;
     } else {
-        let mut target_contents = util::read_file(&dst).map_err(util::io_error)?;
+        let mut target_contents = util::read_file(&dst).map_err(error::io_error)?;
         if target_contents.contains(&marker) {
             // we've already got a section, check if it needs updates
             let mut found_start = false;
@@ -455,10 +444,10 @@ fn append_to_existing(
                     .write(true)
                     .truncate(true)
                     .open(&dst)
-                    .map_err(util::io_error)?;
+                    .map_err(error::io_error)?;
                 outfile
                     .write_all(new_lines.join("\n").as_bytes())
-                    .map_err(util::io_error)?;
+                    .map_err(error::io_error)?;
                 updated = true;
             } else {
                 WRITER.write("section matched, skipped");
@@ -474,10 +463,10 @@ fn append_to_existing(
                 .write(true)
                 .truncate(true)
                 .open(&dst)
-                .map_err(util::io_error)?;
+                .map_err(error::io_error)?;
             outfile
                 .write_all(target_contents.as_bytes())
-                .map_err(util::io_error)?;
+                .map_err(error::io_error)?;
             updated = true;
         }
     }

@@ -3,9 +3,9 @@ use std::fmt::Display;
 
 use crate::error::TaskError;
 use crate::Result;
+use mlua::UserData;
 use petgraph::graph::DiGraph;
 use petgraph::prelude::*;
-use rlua::UserData;
 pub type TaskIdx = NodeIndex<u32>;
 pub type TaskGraph = DiGraph<TaskDefinition, (), u32>;
 
@@ -16,6 +16,7 @@ pub enum TaskResult {
 }
 
 impl TaskResult {
+    #[allow(dead_code)]
     pub fn succeeded(&self) -> bool {
         match self {
             TaskResult::Success => true,

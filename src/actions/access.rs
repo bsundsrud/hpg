@@ -1,9 +1,10 @@
-use rlua::{Error as LuaError, Lua, Table};
+use mlua::{Error as LuaError, Lua, Table};
 
-use crate::{error::TaskError, Result, WRITER};
+use crate::error::{io_error, task_error, TaskError};
+use crate::{Result, WRITER};
 use std::{io::Error as IoError, process::Command};
 
-use super::util::{exit_status, io_error, task_error};
+use super::util::exit_status;
 
 #[derive(Debug)]
 struct UserModDef {
@@ -203,71 +204,59 @@ fn group_exists(name: &str) -> Result<bool, IoError> {
     Ok(cmd.status.success())
 }
 
-pub fn user(lua: &Lua) -> Result<()> {
-    lua.context::<_, Result<(), TaskError>>(|ctx| {
-        let f = ctx.create_function(|_ctx, (name, opts): (String, Table)| {
-            if user_exists(&name).map_err(io_error)? {
-                WRITER.write(format!("Modify user {}", name));
-                modify_user(UserModDef::from_lua(name, opts)?).map_err(task_error)?;
-            } else {
-                WRITER.write(format!("Create user {}", name));
-                create_user(UserModDef::from_lua(name, opts)?).map_err(task_error)?;
-            }
-            Ok(())
-        })?;
-        ctx.globals().set("usermod", f)?;
+pub fn user(lua: &Lua) -> Result<(), TaskError> {
+    let f = lua.create_function(|_ctx, (name, opts): (String, Table)| {
+        if user_exists(&name).map_err(io_error)? {
+            WRITER.write(format!("Modify user {}", name));
+            modify_user(UserModDef::from_lua(name, opts)?).map_err(task_error)?;
+        } else {
+            WRITER.write(format!("Create user {}", name));
+            create_user(UserModDef::from_lua(name, opts)?).map_err(task_error)?;
+        }
         Ok(())
     })?;
+    lua.globals().set("usermod", f)?;
     Ok(())
 }
 
-pub fn user_exists_action(lua: &Lua) -> Result<()> {
-    lua.context::<_, Result<(), TaskError>>(|ctx| {
-        let f = ctx.create_function(|_ctx, name: String| {
-            let e = user_exists(&name).map_err(io_error)?;
-            WRITER.write(format!("User {} exists: {}", name, e));
+pub fn user_exists_action(lua: &Lua) -> Result<(), TaskError> {
+    let f = lua.create_function(|_ctx, name: String| {
+        let e = user_exists(&name).map_err(io_error)?;
+        WRITER.write(format!("User {} exists: {}", name, e));
 
-            Ok(e)
-        })?;
-        ctx.globals().set("user_exists", f)?;
-        Ok(())
+        Ok(e)
     })?;
+    lua.globals().set("user_exists", f)?;
     Ok(())
 }
 
-pub fn group(lua: &Lua) -> Result<()> {
-    lua.context::<_, Result<(), TaskError>>(|ctx| {
-        let f = ctx.create_function(|ctx, (name, opts): (String, Option<Table>)| {
-            let opts = if let Some(o) = opts {
-                o
-            } else {
-                ctx.create_table()?
-            };
-            if group_exists(&name).map_err(io_error)? {
-                WRITER.write(format!("Modify group {}", name));
-                modify_group(GroupModDef::from_lua(name, opts)?).map_err(task_error)?;
-            } else {
-                WRITER.write(format!("Create group {}", name));
-                create_group(GroupModDef::from_lua(name, opts)?).map_err(task_error)?;
-            }
-            Ok(())
-        })?;
-        ctx.globals().set("groupmod", f)?;
+pub fn group(lua: &Lua) -> Result<(), TaskError> {
+    let f = lua.create_function(|ctx, (name, opts): (String, Option<Table>)| {
+        let opts = if let Some(o) = opts {
+            o
+        } else {
+            ctx.create_table()?
+        };
+        if group_exists(&name).map_err(io_error)? {
+            WRITER.write(format!("Modify group {}", name));
+            modify_group(GroupModDef::from_lua(name, opts)?).map_err(task_error)?;
+        } else {
+            WRITER.write(format!("Create group {}", name));
+            create_group(GroupModDef::from_lua(name, opts)?).map_err(task_error)?;
+        }
         Ok(())
     })?;
+    lua.globals().set("groupmod", f)?;
     Ok(())
 }
 
-pub fn group_exists_action(lua: &Lua) -> Result<()> {
-    lua.context::<_, Result<(), TaskError>>(|ctx| {
-        let f = ctx.create_function(|_ctx, name: String| {
-            let e = group_exists(&name).map_err(io_error)?;
-            WRITER.write(format!("Group {} exists: {}", name, e));
+pub fn group_exists_action(lua: &Lua) -> Result<(), TaskError> {
+    let f = lua.create_function(|_ctx, name: String| {
+        let e = group_exists(&name).map_err(io_error)?;
+        WRITER.write(format!("Group {} exists: {}", name, e));
 
-            Ok(e)
-        })?;
-        ctx.globals().set("group_exists", f)?;
-        Ok(())
+        Ok(e)
     })?;
+    lua.globals().set("group_exists", f)?;
     Ok(())
 }

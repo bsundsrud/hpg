@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::tasks::TaskRef;
 use thiserror::Error;
 
@@ -8,7 +10,7 @@ pub enum TaskError {
     #[error("Unknown task {0}")]
     UnknownTask(TaskRef),
     #[error("Lua Error: {0}")]
-    LuaError(#[from] rlua::Error),
+    LuaError(#[from] mlua::Error),
     #[error("IO Error: {0}")]
     IoError(#[from] std::io::Error),
     #[error("Action Failed: {0}")]
@@ -27,4 +29,16 @@ pub enum HpgError {
     TaskError(#[from] TaskError),
     #[error("File Error: {0}")]
     FileError(#[from] std::io::Error),
+}
+
+pub(crate) fn action_error<S: Into<String>>(msg: S) -> mlua::Error {
+    mlua::Error::ExternalError(Arc::new(TaskError::ActionError(msg.into())))
+}
+
+pub(crate) fn task_error(err: TaskError) -> mlua::Error {
+    mlua::Error::ExternalError(Arc::new(err))
+}
+
+pub(crate) fn io_error(e: std::io::Error) -> mlua::Error {
+    mlua::Error::ExternalError(Arc::new(TaskError::IoError(e)))
 }

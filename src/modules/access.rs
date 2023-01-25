@@ -1,6 +1,6 @@
-use crate::{actions::util, error::TaskError, Result};
+use crate::{error, error::TaskError, Result};
+use mlua::{Lua, Table};
 use nix::unistd::{Uid, User as UnixUser};
-use rlua::{Context, Lua, Table};
 
 #[derive(Debug)]
 pub struct UserDef {
@@ -24,7 +24,7 @@ impl UserDef {
         }
     }
 
-    fn to_lua<'lua>(&self, ctx: Context<'lua>) -> Result<Table<'lua>, rlua::Error> {
+    fn to_lua<'lua>(&self, ctx: &'lua Lua) -> Result<Table<'lua>, mlua::Error> {
         let tbl = ctx.create_table()?;
         tbl.set("name", self.name.clone())?;
         tbl.set("uid", self.uid)?;
@@ -36,32 +36,23 @@ impl UserDef {
     }
 }
 
-pub fn user(lua: &Lua) -> Result<()> {
-    lua.context::<_, Result<(), TaskError>>(|ctx| {
-        let f = ctx.create_function(|c, u: Option<String>| {
-            let user = if let Some(username) = u {
-                UnixUser::from_name(&username)
-                    .map_err(|e| {
-                        util::action_error(format!("user syscall for {}: {}", &username, e))
-                    })?
-                    .ok_or_else(|| util::action_error(format!("Unknown user {}", &username)))?
-            } else {
-                UnixUser::from_uid(Uid::effective())
-                    .map_err(|e| {
-                        util::action_error(format!(
-                            "user syscall for current effective user: {}",
-                            e
-                        ))
-                    })?
-                    .ok_or_else(|| util::action_error("Unknown current effective user"))?
-            };
-            let def = UserDef::from_unix(user);
-            Ok(def.to_lua(c.clone())?)
-        })?;
-        ctx.globals().set("user", f)?;
-
-        Ok(())
+pub fn user(lua: &Lua) -> Result<(), TaskError> {
+    let f = lua.create_function(|c, u: Option<String>| {
+        let user = if let Some(username) = u {
+            UnixUser::from_name(&username)
+                .map_err(|e| error::action_error(format!("user syscall for {}: {}", &username, e)))?
+                .ok_or_else(|| error::action_error(format!("Unknown user {}", &username)))?
+        } else {
+            UnixUser::from_uid(Uid::effective())
+                .map_err(|e| {
+                    error::action_error(format!("user syscall for current effective user: {}", e))
+                })?
+                .ok_or_else(|| error::action_error("Unknown current effective user"))?
+        };
+        let def = UserDef::from_unix(user);
+        Ok(def.to_lua(&c)?)
     })?;
+    lua.globals().set("user", f)?;
 
     Ok(())
 }

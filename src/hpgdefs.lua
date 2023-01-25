@@ -200,6 +200,16 @@ function pkg.apt.status(package) end
 ---@return PackageStatus[] statuses List of statuses of removed packages.
 function pkg.apt.remove(packages) end
 
+--- Output of Ensure command
+---@class EnsureTable
+---@field updated boolean False if all packages were at requested versions, True if package installation was attempted/requested
+---@field packages PackageStatus[] List of packages installed/requested
+
+--- Ensure all given packages are installed on a system.  If any are missing, it will call `pkg.apt.update(false)` and `pkg.apt.install(packages)`.
+---@param packages string[]|PackageInstall[] Packages to install.
+---@return EnsureTable status Table with `updated` and `packages`. `updated` is true if installation was attempted, `packages` contains the packages sent to apt.
+function pkg.apt.ensure(packages) end
+
 --- Pretty-prints the Lua value to stdout.
 ---@param value any Value to print.
 function echo(value) end
