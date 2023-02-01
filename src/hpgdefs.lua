@@ -30,6 +30,11 @@ function cancel(reason) end
 ---@return userdata sigil failure marker
 function fail(reason) end
 
+--- Hpg variables that were passed in via file or command line.
+--- Values assigned inside a lua file will be considered defaults, and will be used with less precedence than passed-in variables.
+---@type table
+vars = {}
+
 --- Create a new instance of a Dir object.
 --- Runtime error raised if path exists and is not a directory.
 ---@param path string Directory path in unix format, relative to current working directory.

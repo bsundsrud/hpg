@@ -1,7 +1,9 @@
 use error::HpgError;
 use lazy_static::lazy_static;
 use lua::LuaState;
+use lua::Variables;
 use output::StructuredWriter;
+use std::collections::HashMap;
 use std::fs::File;
 use structopt::StructOpt;
 use tasks::TaskRef;
@@ -62,9 +64,16 @@ struct Opt {
         long = "var",
         name = "KEY=VALUE",
         help = "Key-value pairs to add as variables",
-        parse(try_from_str = parse_variable)
+        parse(try_from_str = parse_variable),
+        conflicts_with("VARS-FILE")
     )]
     variables: Vec<(String, String)>,
+    #[structopt(
+        long = "vars",
+        name = "VARS-FILE",
+        help = "Path to JSON variables file"
+    )]
+    var_file: Option<String>,
     #[structopt(
         long = "lsp-defs",
         help = "Output LSP definitions for HPG to .meta/hpgdefs.lua.  Compatible with EmmyLua and lua-language-server."
@@ -85,7 +94,7 @@ fn lsp_defs() -> &'static str {
     include_str!("hpgdefs.lua")
 }
 
-fn main() -> Result<()> {
+fn run_hpg() -> Result<()> {
     let opt = Opt::from_args();
     if opt.lsp_defs {
         let path = std::path::PathBuf::from("./.meta");
@@ -126,9 +135,39 @@ fn main() -> Result<()> {
     lua.register_fn(modules::installer)?;
     lua.register_fn(modules::systemd_service)?;
     lua.register_fn(modules::user)?;
-    let lua = lua.eval(&code)?;
-    let vars = opt.variables.into_iter().collect();
-    lua.execute(&task_refs, opt.run_defaults, opt.show, vars)?;
+    let v = if let Some(f) = opt.var_file {
+        let s = load_file(&f)?;
+        let json = serde_json::from_str(&s).map_err(|e| HpgError::ParseError(format!("Invalid vars file: {}", e)))?;
+        Variables::from_json(json)
+    } else {
+        let vars: HashMap<String, String> = opt.variables.into_iter().collect();
+        let json = serde_json::to_value(&vars).unwrap();
+        Variables::from_json(json)
+    };
+    let lua = lua.eval(&code, v)?;
+    lua.execute(&task_refs, opt.run_defaults, opt.show)?;
 
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    if let Err(e) = run_hpg() {
+        match e {
+            HpgError::TaskError(t) => {
+                match t {
+                    error::TaskError::CycleError(c) => eprintln!("Cycle detected in task {}", c),
+                    error::TaskError::UnknownTask(t) => eprintln!("Unknown task: {}", t),
+                    error::TaskError::LuaError(l) => eprintln!("Lua Error: {}", l),
+                    error::TaskError::IoError(i) => eprintln!("IO Error: {}", i),
+                    error::TaskError::ActionError(a) => eprintln!("Error in action: {}", a),
+                    error::TaskError::SkippedTask => eprintln!("Skipped Task."),
+                    error::TaskError::TemplateError(t) => eprintln!("Error in template: {}", t),
+                    error::TaskError::DbusError(d) => eprintln!("Dbus error: {}", d),
+                }
+            },
+            HpgError::FileError(f) => eprintln!("Error loading file: {}", f),
+            HpgError::ParseError(p) => eprintln!("Failed parsing: {}", p),
+        }
+    }
     Ok(())
 }

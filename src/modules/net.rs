@@ -101,7 +101,7 @@ impl UserData for HpgUrl {
                 .json()
                 .map_err(|e| error::action_error(format!("Body error: {}", e)))?;
 
-            Ok(util::json_to_lua_value(ctx, j)?)
+            Ok(util::json_to_lua_value(ctx, &j)?)
         });
 
         methods.add_method("save", |ctx, this, (dst, opts): (String, Option<Table>)| {

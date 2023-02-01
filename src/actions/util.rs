@@ -125,14 +125,14 @@ pub(crate) fn lua_table_to_json<'lua>(tbl: Table<'lua>) -> Result<Value, TaskErr
     Ok(Value::Object(map))
 }
 
-pub(crate) fn json_to_lua_value(ctx: &Lua, json: Value) -> Result<mlua::Value, mlua::Error> {
+pub(crate) fn json_to_lua_value<'lua>(ctx: &'lua Lua, json: &Value) -> Result<mlua::Value<'lua>, mlua::Error> {
     use mlua::Value as LuaValue;
 
     let val = match json {
         Value::Null => LuaValue::Nil,
-        Value::Bool(b) => LuaValue::Boolean(b),
+        Value::Bool(b) => LuaValue::Boolean(*b),
         Value::Number(f) => LuaValue::Number(f.as_f64().unwrap()),
-        Value::String(s) => s.to_lua(ctx)?,
+        Value::String(s) => s.clone().to_lua(ctx)?,
         Value::Array(v) => {
             let tbl = ctx.create_table()?;
             let mut idx = 1;
@@ -147,7 +147,7 @@ pub(crate) fn json_to_lua_value(ctx: &Lua, json: Value) -> Result<mlua::Value, m
             let tbl = ctx.create_table()?;
             for (key, val) in obj.into_iter() {
                 let lua_val = json_to_lua_value(ctx, val)?;
-                tbl.set(key, lua_val)?;
+                tbl.set(key.to_string(), lua_val)?;
             }
             LuaValue::Table(tbl)
         }

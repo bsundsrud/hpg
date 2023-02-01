@@ -6,9 +6,9 @@ use std::{
 use crate::{
     error::{self, TaskError},
     tasks::{TaskDefinition, TaskGraphState, TaskRef, TaskResult},
-    Result, WRITER,
+    Result, WRITER, actions::util,
 };
-use mlua::{Function, Lua, LuaOptions, Table, Value, Variadic};
+use mlua::{Function, Lua, LuaOptions, Table, Value, Variadic, UserData, MetaMethod};
 
 pub struct LuaState {
     lua: Lua,
@@ -18,6 +18,61 @@ pub struct LuaState {
 fn std_lib() -> mlua::StdLib {
     use mlua::StdLib;
     StdLib::TABLE | StdLib::STRING | StdLib::UTF8 | StdLib::MATH | StdLib::PACKAGE
+}
+
+#[derive(Debug)]
+pub struct Variables {
+    raw: serde_json::Value,
+}
+
+impl Variables {
+    pub fn from_json(json: serde_json::Value) -> Variables {
+        Variables {
+            raw: json,
+        }
+    }
+
+    fn get_from_raw(&self, key: &str) -> Result<Option<&serde_json::Value>, mlua::Error> {
+        if let serde_json::Value::Object(ref o) = self.raw {
+            Ok(o.get(key))
+        } else {
+            return Err(error::action_error(format!("Invalid variables type, must be a JSON Object")));
+        }
+    }
+
+    fn get_from_registry<'lua>(&self, ctx: &'lua Lua, key: &str) -> Result<Option<mlua::Value<'lua>>, mlua::Error> {
+        let val: Option<mlua::Value> = ctx.named_registry_value(key)?;
+        Ok(val)
+    }
+
+    pub fn get<'lua>(&self, ctx: &'lua Lua, key: &str) -> Result<mlua::Value<'lua>, mlua::Error> {
+        let val = if let Some(v) = self.get_from_raw(&key)? {
+            util::json_to_lua_value(&ctx, v)?
+        } else if let Some(v) = self.get_from_registry(&ctx, &key)? {
+            v
+        } else {
+            return Err(error::action_error(format!("Variable '{}' not defined.", key)));
+        };
+        Ok(val)
+    }
+
+    pub fn set_default(&mut self, ctx: &Lua, key: &str, val: mlua::Value) -> Result<(), mlua::Error> {
+        ctx.set_named_registry_value(key, val)?;
+        Ok(())
+    }
+}
+
+impl UserData for Variables {
+    fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
+        methods.add_meta_method(MetaMethod::Index, |ctx, this, idx: String| {
+            let v = this.get(&ctx, &idx)?;
+            Ok(v)
+        });
+        methods.add_meta_method_mut(MetaMethod::NewIndex, |ctx, this, (idx, val): (String, Value)| {
+            this.set_default(ctx, &idx, val)?;
+            Ok(())
+        });
+    }
 }
 
 impl LuaState {
@@ -122,7 +177,8 @@ impl LuaState {
         Ok(())
     }
 
-    pub fn eval(self, src: &str) -> Result<EvaluatedLuaState> {
+    pub fn eval(self, src: &str, v: Variables) -> Result<EvaluatedLuaState> {
+        self.lua.globals().set("vars", v).map_err(|e| TaskError::ActionError(format!("Couldn't set vars global: {}", e)))?;
         self.eval_string(src)?;
         let tasks = self.tasks.lock().unwrap();
         let graph = TaskGraphState::from_tasks(tasks.to_vec())?;

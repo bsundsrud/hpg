@@ -18,7 +18,7 @@ pub fn from_json(lua: &Lua) -> Result<(), TaskError> {
         WRITER.enter("from_json");
         let json: serde_json::Value =
             serde_json::from_str(&json_str).map_err(|e| action_error(format!("{}", e)))?;
-        let lua_val = util::json_to_lua_value(ctx, json)?;
+        let lua_val = util::json_to_lua_value(ctx, &json)?;
         Ok(lua_val)
     })?;
     lua.globals().set("from_json", f)?;
