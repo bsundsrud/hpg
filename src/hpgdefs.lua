@@ -430,7 +430,7 @@ function SystemdJobResult:failed() end
 function SystemdJobResult:result() end
 
 --- Access to Systemd services.
-local systemd = {}
+systemd = {}
 
 --- Interact with System systemd (Init daemon)
 ---@param unit string Name of the unit to control.
