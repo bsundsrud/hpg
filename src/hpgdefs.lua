@@ -54,6 +54,7 @@ local Dir = {}
 --- Change directory modes.
 ---@param mode string Octal file mode (such as "0700" or "0755").
 ---@return Dir dir Original `dir` instance.
+function Dir:chmod(mode) end
 
 --- Options table for chown.
 ---@class ChownOpts
