@@ -12,6 +12,14 @@ pub struct HpgSystemdUnit {
 
 impl UserData for HpgSystemdUnit {
     fn add_methods<'lua, T: mlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
+        // Connection methods
+        methods.add_method("daemon_reload", |_, this, _: ()| {
+            WRITER.write("Reloading systemd daemon...".to_string());
+            this.unit.daemon_reload().map_err(error::task_error)?;
+            WRITER.write("Daemon reloaded.".to_string());
+            Ok(())
+        });
+
         // Service Control Methods
         methods.add_method("start", |_, this, _: ()| {
             WRITER.write(format!("Starting service {}...", this.unit.service()));

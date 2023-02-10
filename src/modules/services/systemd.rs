@@ -195,6 +195,10 @@ impl SystemdUnit {
         }
     }
 
+    pub fn daemon_reload(&self) -> Result<()> {
+        Ok(self.manager()?.reload()?)
+    }
+
     pub fn reload(&self) -> Result<JobResult> {
         let job = self.manager()?.reload_unit(&self.unit, "replace")?;
         Ok(self.wait_for_job(&job)?)

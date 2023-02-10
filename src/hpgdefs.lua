@@ -442,6 +442,9 @@ function systemd.system(unit) end
 ---@return SystemdUnit unit `SystemdUnit` instance.
 function systemd.session(unit) end
 
+--- Reloads the current (system or session) systemd daemon.
+function SystemdUnit:daemon_reload() end
+
 --- Start the unit.
 ---@return SystemdJobResult result The outcome of the start job.
 function SystemdUnit:start() end
