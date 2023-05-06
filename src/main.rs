@@ -102,6 +102,7 @@ fn run_hpg() -> Result<()> {
         let mut f = std::fs::File::options()
             .create(true)
             .write(true)
+            .truncate(true)
             .open(path.join("hpgdefs.lua"))?;
         f.write_all(&lsp_defs().as_bytes())?;
         return Ok(());
@@ -137,7 +138,8 @@ fn run_hpg() -> Result<()> {
     lua.register_fn(modules::user)?;
     let v = if let Some(f) = opt.var_file {
         let s = load_file(&f)?;
-        let json = serde_json::from_str(&s).map_err(|e| HpgError::ParseError(format!("Invalid vars file: {}", e)))?;
+        let json = serde_json::from_str(&s)
+            .map_err(|e| HpgError::ParseError(format!("Invalid vars file: {}", e)))?;
         Variables::from_json(json)
     } else {
         let vars: HashMap<String, String> = opt.variables.into_iter().collect();
@@ -153,17 +155,15 @@ fn run_hpg() -> Result<()> {
 fn main() -> Result<()> {
     if let Err(e) = run_hpg() {
         match e {
-            HpgError::TaskError(t) => {
-                match t {
-                    error::TaskError::CycleError(c) => eprintln!("Cycle detected in task {}", c),
-                    error::TaskError::UnknownTask(t) => eprintln!("Unknown task: {}", t),
-                    error::TaskError::LuaError(l) => eprintln!("Lua Error: {}", l),
-                    error::TaskError::IoError(i) => eprintln!("IO Error: {}", i),
-                    error::TaskError::ActionError(a) => eprintln!("Error in action: {}", a),
-                    error::TaskError::SkippedTask => eprintln!("Skipped Task."),
-                    error::TaskError::TemplateError(t) => eprintln!("Error in template: {}", t),
-                    error::TaskError::DbusError(d) => eprintln!("Dbus error: {}", d),
-                }
+            HpgError::TaskError(t) => match t {
+                error::TaskError::CycleError(c) => eprintln!("Cycle detected in task {}", c),
+                error::TaskError::UnknownTask(t) => eprintln!("Unknown task: {}", t),
+                error::TaskError::LuaError(l) => eprintln!("Lua Error: {}", l),
+                error::TaskError::IoError(i) => eprintln!("IO Error: {}", i),
+                error::TaskError::ActionError(a) => eprintln!("Error in action: {}", a),
+                error::TaskError::SkippedTask => eprintln!("Skipped Task."),
+                error::TaskError::TemplateError(t) => eprintln!("Error in template: {}", t),
+                error::TaskError::DbusError(d) => eprintln!("Dbus error: {}", d),
             },
             HpgError::FileError(f) => eprintln!("Error loading file: {}", f),
             HpgError::ParseError(p) => eprintln!("Failed parsing: {}", p),
