@@ -4,31 +4,36 @@
 ---@param dependency string|string[] Other task names that must run before this one.
 ---@param body function? Task body, code to run on task execution.
 ---@overload fun(name: string, body: function)
-function task(name, dependency, body) end
+function task(name, dependency, body)
+end
 
 --- Define tasks that should be run as default (via `hpg -D`).
 ---@param task string Task name to register as a default.
 ---@vararg string
-function target(task, ...) end
+function target(task, ...)
+end
 
 --- Creates a sigil that marks task success.
 --- use `return success()` in a task to immediately succeed the task.
 ---@return userdata sigil success marker
-function success() end
+function success()
+end
 
 --- Create a sigil for task cancellation (with optional reason).
 --- Use `return cancel(reason)` in a task to immediately cancel the
 --- current task and skip any downstream dependent task.
 ---@param reason string? Reason for cancellation.
 ---@return userdata sigil cancellation marker
-function cancel(reason) end
+function cancel(reason)
+end
 
 --- Create a sigil for task failure.
 --- Use `return fail(reason)` in a task to immediately fail the task
 --- and stop all task execution.
 ---@param reason string Reason for failure
 ---@return userdata sigil failure marker
-function fail(reason) end
+function fail(reason)
+end
 
 --- Hpg variables that were passed in via file or command line.
 --- Values assigned inside a lua file will be considered defaults, and will be used with less precedence than passed-in variables.
@@ -39,13 +44,15 @@ vars = {}
 --- Runtime error raised if path exists and is not a directory.
 ---@param path string Directory path in unix format, relative to current working directory.
 ---@return Dir dir Dir instance
-function dir(path) end
+function dir(path)
+end
 
 --- Create a Dir object pointing to a user's home directory.
 ---- Runtime error raised if user's home directory is not available.
 ---@param user string? Optional user to get the home directory for.  If omitted, current effective user is assumed.
 ---@return Dir dir Dir instance
-function homedir(user) end
+function homedir(user)
+end
 
 --- Represents a filesystem directory.
 ---@class Dir
@@ -54,7 +61,8 @@ local Dir = {}
 --- Change directory modes.
 ---@param mode string Octal file mode (such as "0700" or "0755").
 ---@return Dir dir Original `dir` instance.
-function Dir:chmod(mode) end
+function Dir:chmod(mode)
+end
 
 --- Options table for chown.
 ---@class ChownOpts
@@ -64,26 +72,31 @@ function Dir:chmod(mode) end
 --- Change ownership of a directory.
 ---@param opts ChownOpts
 ---@return Dir dir Original `Dir` instance.
-function Dir:chown(opts) end
+function Dir:chown(opts)
+end
 
 --- Test for directory existence.
 ---@return boolean exists `true` if the directory exists, `false` otherwise.
-function Dir:exists() end
+function Dir:exists()
+end
 
 --- Create directory and any parent directories, as needed.
 ---@return Dir dir `Dir` instance for this path.
-function Dir:mkdir() end
+function Dir:mkdir()
+end
 
 --- Create a symlink from this directory to the destination.
 ---@param dst string Destination path of the symlink, relative to current working directory.
 ---@return Dir dst `Dir` object for the destination.
-function Dir:symlink(dst) end
+function Dir:symlink(dst)
+end
 
 --- Create a new instance of the `File` class.
 --- Raises a runtime error if the path exists and is not a file.
 ---@param path string Path to file.
 ---@return File file `File` instance.
-function file(path) end
+function file(path)
+end
 
 --- Represents a file on the filesystem.
 ---@class File
@@ -99,7 +112,8 @@ local File = {}
 --- Will not update the file if the region is unchanged.
 ---@param options FileAppendOpts Table of append options.
 ---@return boolean changed Whether or not the section was appended or updated.
-function File:append(options) end
+function File:append(options)
+end
 
 ---@class FileAppendTemplateOpts
 ---@field src string Source file to read from. Exclusive with `contents`.
@@ -113,51 +127,61 @@ function File:append(options) end
 --- Will not update the file if the region is unchanged.
 ---@param options FileAppendTemplateOpts Table of append options.
 ---@return boolean changed Whether or not the section was appended or updated.
-function File:append_template(options) end
+function File:append_template(options)
+end
 
 --- Change file modes.
 ---@param mode string Octal file mode (such as "0644" or "0755").
 ---@return File file Original `file` instance.
-function File:chmod(mode) end
+function File:chmod(mode)
+end
 
 --- Change ownership of a file.
 ---@param opts ChownOpts
 ---@return File file Original `File` instance.
-function File:chown(opts) end
+function File:chown(opts)
+end
 
 --- Return the contents of a given file as a string.
 ---@return string contents The file contents.
-function File:contents() end
+function File:contents()
+end
 
 --- Copy file to destination.
 --- Does not change the destination file if source and destination hashes match.
 ---@param dst string Destination file path, relative to current working directory.
 ---@return boolean changed Whether or not the file was updated.
-function File:copy(dst) end
+function File:copy(dst)
+end
 
 --- Test for file existence.
 ---@return boolean exists `true` if the file exists, `false` otherwise.
-function File:exists() end
+function File:exists()
+end
 
 --- Compute the SHA-256 hash of the file.
 ---@return string hash The hex string of the full SHA-256 hash.
-function File:hash() end
+function File:hash()
+end
 
 --- Create a symlink from this file to the destination.
 ---@param dst string Destination path of the symlink, relative to current working directory.
 ---@return Dir dst `File` object for the destination.
-function File:symlink(dst) end
+function File:symlink(dst)
+end
 
 --- Copy file to destination, evaluating it as a template first.
 --- Does not change the destination file if source and destination hashes match.
 ---@param dst string Destination file, relative to current directory.
 ---@param context table<string, any>? Variables available within a template.
 ---@return boolean changed Whether or not the file was updated.
-function File:template(dst, context) end
+function File:template(dst, context)
+end
 
 --- Create an empty file, if it does not already exist.
 ---@return File file The original `File` object.
-function File:touch() end
+function File:touch()
+end
 
 --- System-wide package management interface.
 ---@class pkg
@@ -172,7 +196,8 @@ pkg.apt = {}
 --- Will only update repos once per HPG run unless `force` is `true`.
 ---@param force boolean? Force a repo update.
 ---@return boolean updated Whether or not the repos were updated.
-function pkg.apt.update(force) end
+function pkg.apt.update(force)
+end
 
 --- (Name, Version) pair for package install requests.
 ---@class PackageInstall
@@ -194,17 +219,20 @@ function pkg.apt.update(force) end
 --- Install packages with `apt-get`.
 ---@param packages string[]|PackageInstall[] Packages to install.
 ---@return PackageStatus status Status of requested packages.
-function pkg.apt.install(packages) end
+function pkg.apt.install(packages)
+end
 
 --- Current status of package.
 ---@param package string Package name.
 ---@return PackageStatus status Status of package.
-function pkg.apt.status(package) end
+function pkg.apt.status(package)
+end
 
 --- Remove packages from the system.
 ---@param packages string[] List of packages to remove.
 ---@return PackageStatus[] statuses List of statuses of removed packages.
-function pkg.apt.remove(packages) end
+function pkg.apt.remove(packages)
+end
 
 --- Output of Ensure command
 ---@class EnsureTable
@@ -214,31 +242,37 @@ function pkg.apt.remove(packages) end
 --- Ensure all given packages are installed on a system.  If any are missing, it will call `pkg.apt.update(false)` and `pkg.apt.install(packages)`.
 ---@param packages string[]|PackageInstall[] Packages to install.
 ---@return EnsureTable status Table with `updated` and `packages`. `updated` is true if installation was attempted, `packages` contains the packages sent to apt.
-function pkg.apt.ensure(packages) end
+function pkg.apt.ensure(packages)
+end
 
 --- Pretty-prints the Lua value to stdout.
 ---@param value any Value to print.
-function echo(value) end
+function echo(value)
+end
 
 --- Parse the given JSON string as a Lua value.
 ---@param s string JSON body to parse.
 ---@return any # A Lua Value representing the JSON body.
-function from_json(s) end
+function from_json(s)
+end
 
 --- Check if a group already exists on a system.
 ---@param groupname string Name of group.
 ---@return boolean exists `true` if group exists, `false` otherwise.
-function group_exists(groupname) end
+function group_exists(groupname)
+end
 
 --- Compute the SHA-256 hash of a string.
 ---@param value string String to hash.
 ---@return string hash SHA-256 hash as hex string.
-function hash(value) end
+function hash(value)
+end
 
 --- Check if a user already exists on a system.
 ---@param username string Username of user.
 ---@return boolean exists `true` if user exists, `false` otherwise.
-function user_exists(username) end
+function user_exists(username)
+end
 
 ---@class ExecOpts
 ---@field args string[]? Arguments to pass to the command.
@@ -259,7 +293,8 @@ function user_exists(username) end
 ---@param cmd string Path to executable.
 ---@param opts ExecOpts? Options for subprocess.
 ---@return ExitStatus status Exit status and output from process.
-function exec(cmd, opts) end
+function exec(cmd, opts)
+end
 
 ---@class GroupOpts
 ---@field gid number? Directly assign a GID.
@@ -268,7 +303,8 @@ function exec(cmd, opts) end
 --- Create or modify a Unix group.
 ---@param name string Name of group to create/modify.
 ---@param opts GroupOpts? Options for group creation/modification.
-function groupmod(name, opts) end
+function groupmod(name, opts)
+end
 
 ---@class ShellOpts
 ---@field inherit_env boolean? Inherit environment from this process. Default `true`.
@@ -286,7 +322,8 @@ function groupmod(name, opts) end
 ---@param cmd string Shell command to run.
 ---@param opts ShellOpts? Options for shell command.
 ---@return ExitStatus status Exit status of shell command.
-function shell(cmd, opts) end
+function shell(cmd, opts)
+end
 
 ---@class UserOpts
 ---@field comment string? Comment for user, also used as "Real Name".
@@ -302,7 +339,8 @@ function shell(cmd, opts) end
 --- Create or modify a user.
 ---@param name string Username of user to create/modify.
 ---@param opts UserOpts Options for user creation.
-function usermod(name, opts) end
+function usermod(name, opts)
+end
 
 ---@class UserDef
 ---@field name string Username
@@ -315,7 +353,8 @@ function usermod(name, opts) end
 --- Get information on an existing user.
 ---@param name string? Username to look up.  If omitted, defaults to current effective user
 ---@return UserDef userdata Table containing information from /etc/passwd
-function user(name) end
+function user(name)
+end
 
 --- System information from uname(2)
 ---@class Uname
@@ -326,7 +365,7 @@ function user(name) end
 ---@field machine string Machine hardware name.
 
 --- Information about the machine that HPG is running on.
-local machine = {}
+machine = {}
 
 ---@type Uname
 machine.uname = {}
@@ -355,7 +394,8 @@ local Archive = {}
 --- Extract an archive.
 ---@param dst string Path to extract to.
 ---@return Dir dst Dir object for destination.
-function Archive:extract(dst) end
+function Archive:extract(dst)
+end
 
 ---@class InstallOpts
 ---@field url string? URL to fetch from.  If omitted, `archive_path` is assumed to exist already locally.
@@ -367,7 +407,8 @@ function Archive:extract(dst) end
 ---@param archive_path string Local path to archive file. If installing from the network, this is where the file will be downloaded to.
 ---@param extract_dir string Destination directory for the archive.
 ---@param opts InstallOpts Extra options for install.
-function install(archive_path, extract_dir, opts) end
+function install(archive_path, extract_dir, opts)
+end
 
 --- Represents a network resource.
 ---@class Url
@@ -376,7 +417,8 @@ local Url = {}
 --- Create a `Url` instance that points to a network resource.
 ---@param u string URL for resource.
 ---@return Url # `Url` instance.
-function url(u) end
+function url(u)
+end
 
 ---@class FetchUrlOpts
 ---@field headers table<string, string>? Key/value pairs which will be inserted into the request as headers.
@@ -385,19 +427,22 @@ function url(u) end
 --- Performs a GET request against the resource and returns the body as a string.
 ---@param opts FetchUrlOpts? Fetch options.
 ---@return string body The body of the response.
-function Url:get(opts) end
+function Url:get(opts)
+end
 
 --- Performs a GET request against the resource, parses the response body as JSON,
 --- and returns the Lua representation of the JSON.
 ---@param opts FetchUrlOpts? Fetch options.
 ---@return any json JSON body as Lua value.
-function Url:json(opts) end
+function Url:json(opts)
+end
 
 --- Performs a GET request against the resource and saves the response body to disk.
 ---@param dst string Destination path.
 ---@param opts FetchUrlOpts? Fetch options.
 ---@return File file `File` instance for payload.
-function Url:save(dst, opts) end
+function Url:save(dst, opts)
+end
 
 --- Represents a Systemd unit.
 ---@class SystemdUnit
@@ -418,16 +463,19 @@ local SystemdJobResult = {}
 --- Whether the job was considered successful.
 --- result == "done"
 ---@return boolean success
-function SystemdJobResult:successful() end
+function SystemdJobResult:successful()
+end
 
 --- Whether the job was considered failed.
 --- result != "done"
 ---@return boolean success
-function SystemdJobResult:failed() end
+function SystemdJobResult:failed()
+end
 
 --- The job status of the action.
 ---@return SystemdJobResultStr result
-function SystemdJobResult:result() end
+function SystemdJobResult:result()
+end
 
 --- Access to Systemd services.
 systemd = {}
@@ -435,70 +483,90 @@ systemd = {}
 --- Interact with System systemd (Init daemon)
 ---@param unit string Name of the unit to control.
 ---@return SystemdUnit unit `SystemdUnit` instance.
-function systemd.system(unit) end
+function systemd.system(unit)
+end
 
 --- Interact with Session systemd (User daemon)
 ---@param unit string Name of the unit to control.
 ---@return SystemdUnit unit `SystemdUnit` instance.
-function systemd.session(unit) end
+function systemd.session(unit)
+end
 
 --- Reloads the current (system or session) systemd daemon.
-function SystemdUnit:daemon_reload() end
+function SystemdUnit:daemon_reload()
+end
 
 --- Start the unit.
 ---@return SystemdJobResult result The outcome of the start job.
-function SystemdUnit:start() end
+function SystemdUnit:start()
+end
 
 --- Start the unit, or fail execution.
-function SystemdUnit:must_start() end
+function SystemdUnit:must_start()
+end
 
 --- Stop the unit.
 ---@return SystemdJobResult result The outcome of the stop job.
-function SystemdUnit:stop() end
+function SystemdUnit:stop()
+end
 
 --- Stop the unit, or fail execution.
-function SystemdUnit:must_stop() end
+function SystemdUnit:must_stop()
+end
 
 --- Reload the unit.
 ---@return SystemdJobResult result The outcome of the reload job.
-function SystemdUnit:reload() end
+function SystemdUnit:reload()
+end
 
 --- Reload the unit, or fail execution.
-function SystemdUnit:must_reload() end
+function SystemdUnit:must_reload()
+end
 
 --- Restart the unit.
 ---@return SystemdJobResult result The outcome of the restart job.
-function SystemdUnit:restart() end
+function SystemdUnit:restart()
+end
 
 --- Restart the unit, or fail execution.
-function SystemdUnit:must_restart() end
+function SystemdUnit:must_restart()
+end
 
 --- Reload or restart the unit.
 --- Attempts reload unless the unit does not support reloading.
 ---@return SystemdJobResult result The outcome of the reload job.
-function SystemdUnit:reload_or_restart() end
+function SystemdUnit:reload_or_restart()
+end
 
 --- Reload or restart the unit, or fail execution.
 --- Attempts reload unless the unit does not support reloading.
-function SystemdUnit:must_reload_or_restart() end
+function SystemdUnit:must_reload_or_restart()
+end
 
 --- Enable the unit.
-function SystemdUnit:enable() end
+function SystemdUnit:enable()
+end
 
 --- Force-enable the unit.
-function SystemdUnit:force_enable() end
+function SystemdUnit:force_enable()
+end
 
 --- Disable the unit.
-function SystemdUnit:disable() end
+function SystemdUnit:disable()
+end
 
 --- Force-disable the unit.
-function SystemdUnit:force_disable() end
+function SystemdUnit:force_disable()
+end
 
 --- Mask the unit.
-function SystemdUnit:mask() end
+function SystemdUnit:mask()
+end
 
 --- Force-mask the unit.
-function SystemdUnit:force_mask() end
+function SystemdUnit:force_mask()
+end
 
 --- Unmask the unit.
-function SystemdUnit:unmask() end
+function SystemdUnit:unmask()
+end
