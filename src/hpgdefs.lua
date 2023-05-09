@@ -1,3 +1,4 @@
+---@diagnostic disable: lowercase-global, missing-return
 --- Defines an HPG task. Task bodies are not evaluated until after
 --- task dependencies and execution order has been defined.
 ---@param name string Task name.
@@ -386,6 +387,8 @@ machine.uname = {}
 ---@param path string Path to archive file.
 ---@param opts ArchiveOpts? Options for the archive.
 ---@return Archive archive `Archive` instance.
+function archive(path, opts)
+end
 
 --- Represents a compressed archive.
 ---@class Archive
