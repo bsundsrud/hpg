@@ -14,6 +14,7 @@ mod hash;
 mod lua;
 pub(crate) mod modules;
 mod output;
+mod task;
 mod tasks;
 
 pub type Result<T, E = HpgError> = core::result::Result<T, E>;
