@@ -25,4 +25,4 @@ regex = "1.7.1"
 url = "2.3.1"
 zbus = "3.7.0"
 zip = "0.6.3"
-mlua = { version = "0.8.7", features = ["lua54", "mlua_derive", "vendored"] }
+mlua = { version = "0.9.1", features = ["lua54", "mlua_derive", "vendored", "macros"] }

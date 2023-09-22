@@ -1,11 +1,11 @@
 use error::HpgError;
 use lazy_static::lazy_static;
-use lua::LuaState;
-use lua::Variables;
 use output::StructuredWriter;
 use std::collections::HashMap;
 use std::fs::File;
 use structopt::StructOpt;
+use task::LuaState;
+use task::Variables;
 use tasks::TaskRef;
 
 pub(crate) mod actions;
@@ -113,7 +113,6 @@ fn run_hpg() -> Result<()> {
         return Ok(());
     }
     let code = load_file(&opt.config)?;
-    let task_refs: Vec<TaskRef> = opt.targets.into_iter().map(TaskRef::new).collect();
     let lua = LuaState::new()?;
     lua.register_fn(actions::echo)?;
     lua.register_fn(actions::fail)?;
@@ -149,7 +148,8 @@ fn run_hpg() -> Result<()> {
         Variables::from_json(json)
     };
     let lua = lua.eval(&code, v)?;
-    lua.execute(&task_refs, opt.run_defaults, opt.show)?;
+    let requested_tasks: Vec<&str> = opt.targets.iter().map(|t| t.as_str()).collect();
+    lua.execute(&requested_tasks, opt.run_defaults, opt.show)?;
 
     Ok(())
 }

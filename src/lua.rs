@@ -199,9 +199,7 @@ impl LuaState {
             .globals()
             .set("vars", v)
             .map_err(|e| TaskError::ActionError(format!("Couldn't set vars global: {}", e)))?;
-        //self.eval_string(src)?;
-        task::exec(&self.lua, &src)?;
-        todo!("Should have a fully evaluated graph here");
+        self.eval_string(src)?;
         let tasks = self.tasks.lock().unwrap();
         let graph = TaskGraphState::from_tasks(tasks.to_vec())?;
         Ok(EvaluatedLuaState {

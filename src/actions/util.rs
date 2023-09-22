@@ -1,6 +1,6 @@
 use crate::error::{self, TaskError};
 use crate::WRITER;
-use mlua::{Lua, Table, ToLua};
+use mlua::{IntoLua, Lua, Table};
 use nix::unistd::{Gid, Group, Uid, User};
 use serde_json::{Map, Value};
 use std::os::unix::process::ExitStatusExt;
@@ -125,14 +125,17 @@ pub(crate) fn lua_table_to_json<'lua>(tbl: Table<'lua>) -> Result<Value, TaskErr
     Ok(Value::Object(map))
 }
 
-pub(crate) fn json_to_lua_value<'lua>(ctx: &'lua Lua, json: &Value) -> Result<mlua::Value<'lua>, mlua::Error> {
+pub(crate) fn json_to_lua_value<'lua>(
+    ctx: &'lua Lua,
+    json: &Value,
+) -> Result<mlua::Value<'lua>, mlua::Error> {
     use mlua::Value as LuaValue;
 
     let val = match json {
         Value::Null => LuaValue::Nil,
         Value::Bool(b) => LuaValue::Boolean(*b),
         Value::Number(f) => LuaValue::Number(f.as_f64().unwrap()),
-        Value::String(s) => s.clone().to_lua(ctx)?,
+        Value::String(s) => s.clone().into_lua(ctx)?,
         Value::Array(v) => {
             let tbl = ctx.create_table()?;
             let mut idx = 1;
