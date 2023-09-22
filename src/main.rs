@@ -137,6 +137,7 @@ fn run_hpg() -> Result<()> {
     lua.register_fn(modules::installer)?;
     lua.register_fn(modules::systemd_service)?;
     lua.register_fn(modules::user)?;
+
     let v = if let Some(f) = opt.var_file {
         let s = load_file(&f)?;
         let json = serde_json::from_str(&s)

@@ -1,11 +1,10 @@
 ---@diagnostic disable: lowercase-global, missing-return
 --- Defines an HPG task. Task bodies are not evaluated until after
 --- task dependencies and execution order has been defined.
----@param name string Task name.
----@param dependency string|string[] Other task names that must run before this one.
+---@param dependency? string|string[] Other task names that must run before this one.
 ---@param body function? Task body, code to run on task execution.
----@overload fun(name: string, body: function)
-function task(name, dependency, body)
+---@overload fun(body: function)
+function task(dependency, body)
 end
 
 --- Define tasks that should be run as default (via `hpg -D`).

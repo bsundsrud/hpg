@@ -1,10 +1,12 @@
-use anyhow::{anyhow, Result};
+use anyhow::anyhow;
 use mlua::{self, Function, Lua, Table, UserData, Value};
 use std::{
     collections::HashMap,
     sync::{atomic::AtomicUsize, Arc, RwLock},
 };
 
+use crate::error::TaskError;
+pub mod graph;
 #[derive(Debug, Clone)]
 pub struct Task {
     id: usize,
@@ -77,7 +79,7 @@ impl TaskRegistry {
     }
 }
 
-fn find_tasks(ctx: &Lua, registry: TaskRegistry) -> Result<()> {
+fn find_tasks(ctx: &Lua, registry: TaskRegistry) -> Result<(), TaskError> {
     let globals = ctx.globals();
     for pair in globals.pairs() {
         let (name, val): (String, Value) = pair?;
@@ -94,7 +96,7 @@ fn find_tasks(ctx: &Lua, registry: TaskRegistry) -> Result<()> {
     Ok(())
 }
 
-pub fn define_task_function(lua: &Lua, registry: TaskRegistry) -> Result<()> {
+pub fn define_task_function(lua: &Lua, registry: TaskRegistry) -> Result<(), TaskError> {
     let task_table = lua.create_table()?;
     lua.set_named_registry_value("tasks", task_table)?;
 
@@ -177,7 +179,7 @@ pub fn define_task_function(lua: &Lua, registry: TaskRegistry) -> Result<()> {
     Ok(())
 }
 
-pub fn exec(lua: &Lua, code: &str) -> Result<()> {
+pub fn exec(lua: &Lua, code: &str) -> Result<(), TaskError> {
     let registry = TaskRegistry::new();
     define_task_function(&lua, registry.clone())?;
 
