@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{error::TaskError, tasks::TaskResult, Result, WRITER};
+use crate::{error::TaskError, task::TaskResult, Result, WRITER};
 mod access;
 mod file;
 mod process;

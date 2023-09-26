@@ -1,16 +1,18 @@
-local depB = task(function()
-    print("depB")
+local depB = task("dep B", function()
+    echo("depB")
 end)
 
-local depC = task(function()
-    print("depC")
+local depC = task("dep C", function()
+    echo("depC")
+
 end)
 
-local depA = task(depC, function()
-    print("depA")
+local depA = task("dep A", depC, function()
+    echo("depA")
 end)
 
-Entry = task({ depA, depB }, function()
-    print("entrypoint")
+Entry = task("main task", { depA, depB }, function()
+    echo("entrypoint")
 end)
 
+target(Entry, depA)

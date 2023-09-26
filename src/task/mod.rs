@@ -1,35 +1,69 @@
-use crate::{actions::util, error, Result};
+use std::{collections::HashMap, fmt::Display, time::Duration};
+
+use crate::{
+    tracker::{OUTPUT, TRACKER},
+    Result, WRITER,
+};
 use anyhow::anyhow;
-use mlua::{
-    self, chunk, Function, HookTriggers, Lua, LuaOptions, MetaMethod, Table, UserData, Value,
-    Variadic,
-};
-use std::{
-    collections::HashMap,
-    sync::{atomic::AtomicUsize, Arc, RwLock},
-};
+use mlua::{self, FromLua, Function, Lua, LuaOptions, Table, UserData, Value, Variadic};
 
 use crate::error::TaskError;
 pub mod graph;
 pub mod vars;
 pub use vars::Variables;
-
-use self::graph::GraphState;
+pub mod registry;
+use self::{graph::GraphState, registry::TaskRegistry};
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct TaskHandle(usize);
 
-#[derive(Debug, Clone)]
+impl Display for TaskHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Task {
     id: TaskHandle,
+    description: String,
     deps: Vec<Task>,
 }
 
 impl Task {
-    pub fn new(id: usize, deps: Vec<Task>) -> Task {
+    pub fn new(id: usize, description: String, deps: Vec<Task>) -> Task {
         Task {
             id: TaskHandle(id),
+            description,
             deps,
+        }
+    }
+
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+
+    pub fn handle(&self) -> TaskHandle {
+        self.id
+    }
+}
+
+impl<'lua> FromLua<'lua> for Task {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> mlua::Result<Self> {
+        match value {
+            Value::UserData(ud) => {
+                if ud.is::<Task>() {
+                    let t: &Task = &*ud.borrow::<Task>()?;
+                    return Ok(t.clone());
+                } else {
+                    return Err(mlua::Error::runtime("UserData was not of type Task"));
+                }
+            }
+            _ => {
+                return Err(mlua::Error::runtime(
+                    "Only UserData can be converted to a Task",
+                ))
+            }
         }
     }
 }
@@ -37,76 +71,29 @@ impl Task {
 impl UserData for Task {}
 
 #[derive(Debug, Clone)]
-pub struct TaskRegistry {
-    next_id: Arc<AtomicUsize>,
-    named: Arc<RwLock<HashMap<String, TaskHandle>>>,
-    tasks: Arc<RwLock<HashMap<TaskHandle, Task>>>,
+pub enum TaskResult {
+    Success,
+    Incomplete(Option<String>),
 }
 
-impl TaskRegistry {
-    pub fn new() -> Self {
-        Self {
-            next_id: Arc::new(AtomicUsize::new(1)),
-            named: Arc::new(RwLock::new(HashMap::new())),
-            tasks: Arc::new(RwLock::new(HashMap::new())),
+impl TaskResult {
+    #[allow(dead_code)]
+    pub fn succeeded(&self) -> bool {
+        match self {
+            TaskResult::Success => true,
+            TaskResult::Incomplete(_) => false,
         }
     }
 
-    pub fn register_task(&self, task: Task) {
-        let mut tasks = self.tasks.write().unwrap();
-        tasks.insert(task.id, task);
-    }
-
-    pub fn identify(&self, handle: TaskHandle) -> String {
-        if let Some((name, _handle)) = self
-            .named
-            .read()
-            .unwrap()
-            .iter()
-            .find(|(_k, v)| v.0 == handle.0)
-        {
-            return name.clone();
-        } else {
-            return format!("AnonymousTask({})", handle.0);
+    pub fn incomplete(&self) -> bool {
+        match self {
+            TaskResult::Success => false,
+            TaskResult::Incomplete(_) => true,
         }
-    }
-
-    pub fn register_name<S: Into<String>>(&self, id: TaskHandle, name: S) {
-        let mut named = self.named.write().unwrap();
-        named.insert(name.into(), id);
-    }
-
-    pub fn task_for_id(&self, id: usize) -> Option<Task> {
-        self.tasks.read().unwrap().get(&TaskHandle(id)).cloned()
-    }
-
-    pub fn task_for_name(&self, name: &str) -> Option<Task> {
-        if let Some(i) = self.named.read().unwrap().get(name) {
-            self.tasks.read().unwrap().get(i).cloned()
-        } else {
-            None
-        }
-    }
-
-    pub fn tasks(&self) -> Vec<Task> {
-        self.tasks.read().unwrap().values().cloned().collect()
-    }
-
-    pub fn named_tasks(&self) -> HashMap<String, Task> {
-        let tasks = self.tasks.read().unwrap();
-        self.named
-            .read()
-            .unwrap()
-            .iter()
-            .map(|(name, id)| (name.clone(), tasks.get(id).cloned().unwrap()))
-            .collect()
-    }
-
-    pub fn next_id(&self) -> usize {
-        self.next_id
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
     }
 }
+
+impl UserData for TaskResult {}
 
 fn std_lib() -> mlua::StdLib {
     use mlua::StdLib;
@@ -140,7 +127,7 @@ impl LuaState {
         lua.set_named_registry_value("tasks", task_table)?;
         let registry = self.registry.clone();
         let f = lua.create_function(
-            move |ctx, (deps_or_f, maybe_f): (Value, Option<Function>)| {
+            move |ctx, (desc, deps_or_f, maybe_f): (String, Value, Option<Function>)| {
                 let mut task_deps = Vec::new();
                 let mut task_fn = None;
                 // Handle first argument to task() function
@@ -208,7 +195,7 @@ impl LuaState {
                 }
                 ctx.set_named_registry_value("tasks", task_table)?;
 
-                let task = Task::new(i, task_deps);
+                let task = Task::new(i, desc, task_deps);
                 registry.register_task(task.clone());
 
                 Ok(task)
@@ -222,10 +209,10 @@ impl LuaState {
     fn define_target_function(&self) -> Result<(), TaskError> {
         let targets: Vec<String> = Vec::new();
         self.lua.set_named_registry_value("targets", targets)?;
-        let target_fn = self.lua.create_function(|ctx, tasks: Variadic<String>| {
-            let mut targets: Vec<String> = ctx.named_registry_value("targets")?;
+        let target_fn = self.lua.create_function(|ctx, tasks: Variadic<Task>| {
+            let mut targets: Vec<Task> = ctx.named_registry_value("targets")?;
 
-            let tasks: Vec<String> = tasks.into_iter().collect();
+            let tasks: Vec<Task> = tasks.into_iter().collect();
 
             for task in tasks {
                 if !targets.contains(&task) {
@@ -292,29 +279,128 @@ impl EvaluatedLuaState {
         self.graph.execution_for_tasks(tasks)
     }
 
+    fn get_targets(&self, requested: &[&str]) -> Result<Vec<Task>, TaskError> {
+        let mut requested_handles = Vec::new();
+
+        for t in requested {
+            if let Some(task) = self.registry.task_for_name(t) {
+                requested_handles.push(task);
+            } else {
+                return Err(TaskError::ActionError(format!("Unknown task {}", t)));
+            }
+        }
+        Ok(requested_handles)
+    }
+
+    fn get_default_targets(&self) -> Result<Vec<Task>, TaskError> {
+        let targets: Vec<Task> = self.lua.named_registry_value("targets")?;
+        Ok(targets)
+    }
+
+    pub fn available_targets(&self) -> Vec<(String, Task)> {
+        self.registry.named_tasks().into_iter().collect()
+    }
+
     pub fn execute(
         &self,
         tasks: &[&str],
         run_default_targets: bool,
         show_plan: bool,
     ) -> Result<(), TaskError> {
-        let mut requested_handles = Vec::new();
+        let mut requested_tasks = self.get_targets(tasks)?;
 
-        for t in tasks {
-            if let Some(task) = self.registry.task_for_name(t) {
-                requested_handles.push(task.id);
-            } else {
-                return Err(TaskError::ActionError(format!("Unknown task {}", t)));
+        if run_default_targets {
+            let defaults = self.get_default_targets()?;
+            if !defaults.is_empty() {
+                for t in defaults.iter() {
+                    TRACKER.println(format!("  {}", t.description));
+                }
             }
+            requested_tasks.extend(defaults);
         }
+        let requested_handles: Vec<TaskHandle> =
+            requested_tasks.into_iter().map(|t| t.id).collect();
 
         let ordering = self.execution_ordering(&requested_handles);
         if show_plan {
-            for handle in ordering {
-                println!("{}", self.registry.identify(handle));
+            OUTPUT.println("Execution Plan:");
+            for (idx, handle) in ordering.into_iter().enumerate() {
+                let t = self.registry.task_for_handle(handle);
+                TRACKER.println(format!("  {}. {}", idx + 1, t.description));
             }
+            return Ok(());
         }
+        OUTPUT.run(ordering.len() as u64);
+        let mut task_results: HashMap<TaskHandle, TaskResult> = HashMap::new();
+        let task_table: Table = self.lua.named_registry_value("tasks")?;
 
-        todo!()
+        for task in ordering {
+            let t = self.registry.task_for_handle(task);
+            OUTPUT.task(&t.description);
+            //TRACKER.current_run().unwrap().task(t.description.clone());
+            let mut parent_failed = false;
+
+            // Did all our parents run successfully?
+            for parent in self.graph.direct_parents(task) {
+                // unwrap is safe because we're guaranteed to execute parents first due to ordering
+                match task_results.get(&parent).unwrap() {
+                    TaskResult::Success => {}
+                    TaskResult::Incomplete(_) => {
+                        OUTPUT.current_task().println("SKIPPED");
+                        parent_failed = true;
+                        break;
+                    }
+                }
+            }
+            // If a parent hasn't been run, we also need to skip
+            if parent_failed {
+                task_results.insert(task, TaskResult::Incomplete(None));
+                continue;
+            }
+
+            let maybe_f: Option<Function> = task_table.get(task.0)?;
+            if let Some(f) = maybe_f {
+                match f.call(()) {
+                    Ok(mlua::Value::UserData(ud)) => {
+                        if ud.is::<TaskResult>() {
+                            let tr: &TaskResult = &ud.borrow().unwrap();
+                            if let TaskResult::Incomplete(_) = tr {
+                                OUTPUT.current_task().println("TASK INCOMPLETE");
+                            }
+                            task_results.insert(task, tr.clone());
+                        } else {
+                            task_results.insert(task, TaskResult::Success);
+                        }
+                    }
+                    Ok(_) => {
+                        OUTPUT.current_task().println("SUCCESSFUL");
+                        task_results.insert(task, TaskResult::Success);
+                    }
+                    Err(mlua::Error::CallbackError { traceback, cause }) => {
+                        if let mlua::Error::ExternalError(ref e) = *cause.clone() {
+                            OUTPUT
+                                .current_task()
+                                .println(format!("{}\n{}", e, traceback));
+                            OUTPUT
+                                .current_task()
+                                .println(format!("Source: {:?}", e.source()))
+                        } else {
+                            OUTPUT
+                                .current_task()
+                                .println(format!("{}\n{}", cause, traceback));
+                        }
+                        break;
+                    }
+                    Err(e) => return Err(e.into()),
+                }
+            } else {
+                task_results.insert(task, TaskResult::Success);
+            }
+            std::thread::sleep(Duration::from_secs(1));
+        }
+        if task_results.into_values().any(|r| r.incomplete()) {
+            return Err(TaskError::SkippedTask);
+        }
+        Ok(())
     }
 }

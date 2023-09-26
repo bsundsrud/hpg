@@ -6,16 +6,17 @@ use std::fs::File;
 use structopt::StructOpt;
 use task::LuaState;
 use task::Variables;
-use tasks::TaskRef;
+use tracker::PrettyTracker;
+use tracker::OUTPUT;
+use tracker::TRACKER;
 
 pub(crate) mod actions;
 mod error;
 mod hash;
-mod lua;
 pub(crate) mod modules;
 mod output;
 mod task;
-mod tasks;
+mod tracker;
 
 pub type Result<T, E = HpgError> = core::result::Result<T, E>;
 use std::io::prelude::*;
@@ -87,6 +88,8 @@ struct Opt {
     raw_lsp_defs: bool,
     #[structopt(short, long, help = "Show planned execution but do not execute")]
     show: bool,
+    #[structopt(short, long, help = "Show available targets")]
+    list: bool,
     #[structopt(name = "TARGETS", help = "Task names to run")]
     targets: Vec<String>,
 }
@@ -148,13 +151,22 @@ fn run_hpg() -> Result<()> {
         Variables::from_json(json)
     };
     let lua = lua.eval(&code, v)?;
+    if opt.list {
+        let _guard = WRITER.enter("targets");
+        OUTPUT.println("Available Tasks:");
+        for (name, task) in lua.available_targets() {
+            OUTPUT.println(format!("  {}: {}", name, task.description()));
+        }
+        return Ok(());
+    }
     let requested_tasks: Vec<&str> = opt.targets.iter().map(|t| t.as_str()).collect();
     lua.execute(&requested_tasks, opt.run_defaults, opt.show)?;
 
     Ok(())
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     if let Err(e) = run_hpg() {
         match e {
             HpgError::TaskError(t) => match t {

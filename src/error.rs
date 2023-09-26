@@ -1,14 +1,15 @@
 use std::sync::Arc;
 
-use crate::tasks::TaskRef;
 use thiserror::Error;
+
+use crate::task::TaskHandle;
 
 #[derive(Debug, Error)]
 pub enum TaskError {
     #[error("Cycle detected involving {0}")]
-    CycleError(TaskRef),
+    CycleError(TaskHandle),
     #[error("Unknown task {0}")]
-    UnknownTask(TaskRef),
+    UnknownTask(TaskHandle),
     #[error("Lua Error: {0}")]
     LuaError(#[from] mlua::Error),
     #[error("IO Error: {0}")]

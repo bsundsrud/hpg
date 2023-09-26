@@ -74,6 +74,7 @@ impl StructuredWriter {
     }
 
     pub fn write<S: AsRef<str>>(&self, msg: S) {
+        return;
         let msg = msg.as_ref();
         let indent = self.indent();
         let indent_str = " ".repeat(2 * indent);
