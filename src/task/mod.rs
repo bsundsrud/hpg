@@ -1,10 +1,8 @@
 use std::{collections::HashMap, fmt::Display, time::Duration};
 
-use crate::{
-    tracker::{OUTPUT, TRACKER},
-    Result, WRITER,
-};
+use crate::{indent_output, output, tracker::TRACKER, Result};
 use anyhow::anyhow;
+use console::style;
 use mlua::{self, FromLua, Function, Lua, LuaOptions, Table, UserData, Value, Variadic};
 
 use crate::error::TaskError;
@@ -312,8 +310,9 @@ impl EvaluatedLuaState {
         if run_default_targets {
             let defaults = self.get_default_targets()?;
             if !defaults.is_empty() {
+                output!("{}", style("Default Targets").cyan());
                 for t in defaults.iter() {
-                    TRACKER.println(format!("  {}", t.description));
+                    indent_output!(1, "{}", t.description);
                 }
             }
             requested_tasks.extend(defaults);
@@ -323,21 +322,21 @@ impl EvaluatedLuaState {
 
         let ordering = self.execution_ordering(&requested_handles);
         if show_plan {
-            OUTPUT.println("Execution Plan:");
+            output!("{}", style("Execution Plan").cyan());
             for (idx, handle) in ordering.into_iter().enumerate() {
                 let t = self.registry.task_for_handle(handle);
-                TRACKER.println(format!("  {}. {}", idx + 1, t.description));
+                indent_output!(1, "{}. {}", idx + 1, t.description);
             }
             return Ok(());
         }
-        OUTPUT.run(ordering.len() as u64);
+
         let mut task_results: HashMap<TaskHandle, TaskResult> = HashMap::new();
         let task_table: Table = self.lua.named_registry_value("tasks")?;
-
+        TRACKER.run(ordering.len() as u64);
+        output!("{}", style("Execution").cyan());
         for task in ordering {
             let t = self.registry.task_for_handle(task);
-            OUTPUT.task(&t.description);
-            //TRACKER.current_run().unwrap().task(t.description.clone());
+            TRACKER.task(t.description.clone());
             let mut parent_failed = false;
 
             // Did all our parents run successfully?
@@ -346,7 +345,7 @@ impl EvaluatedLuaState {
                 match task_results.get(&parent).unwrap() {
                     TaskResult::Success => {}
                     TaskResult::Incomplete(_) => {
-                        OUTPUT.current_task().println("SKIPPED");
+                        TRACKER.task_skip();
                         parent_failed = true;
                         break;
                     }
@@ -365,7 +364,7 @@ impl EvaluatedLuaState {
                         if ud.is::<TaskResult>() {
                             let tr: &TaskResult = &ud.borrow().unwrap();
                             if let TaskResult::Incomplete(_) = tr {
-                                OUTPUT.current_task().println("TASK INCOMPLETE");
+                                TRACKER.task_skip();
                             }
                             task_results.insert(task, tr.clone());
                         } else {
@@ -373,21 +372,15 @@ impl EvaluatedLuaState {
                         }
                     }
                     Ok(_) => {
-                        OUTPUT.current_task().println("SUCCESSFUL");
+                        TRACKER.task_success();
                         task_results.insert(task, TaskResult::Success);
                     }
                     Err(mlua::Error::CallbackError { traceback, cause }) => {
                         if let mlua::Error::ExternalError(ref e) = *cause.clone() {
-                            OUTPUT
-                                .current_task()
-                                .println(format!("{}\n{}", e, traceback));
-                            OUTPUT
-                                .current_task()
-                                .println(format!("Source: {:?}", e.source()))
+                            output!("{}\n{}", e, traceback);
+                            output!("Source: {:?}", e.source())
                         } else {
-                            OUTPUT
-                                .current_task()
-                                .println(format!("{}\n{}", cause, traceback));
+                            output!("{}\n{}", cause, traceback);
                         }
                         break;
                     }
@@ -396,11 +389,12 @@ impl EvaluatedLuaState {
             } else {
                 task_results.insert(task, TaskResult::Success);
             }
-            std::thread::sleep(Duration::from_secs(1));
         }
         if task_results.into_values().any(|r| r.incomplete()) {
+            TRACKER.finish_fail();
             return Err(TaskError::SkippedTask);
         }
+        TRACKER.finish_success();
         Ok(())
     }
 }

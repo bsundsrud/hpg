@@ -1,5 +1,6 @@
 use crate::error::{self, TaskError};
-use crate::WRITER;
+use crate::output;
+
 use mlua::{IntoLua, Lua, Table};
 use nix::unistd::{Gid, Group, Uid, User};
 use serde_json::{Map, Value};
@@ -74,21 +75,21 @@ pub(crate) fn run_chown(
             let gid = gid_for_value(&g)?;
             nix::unistd::chown(p, None, Some(gid))
                 .map_err(|e| error::action_error(format!("chown: {}", e)))?;
-            WRITER.write(format!("gid: {}", gid));
+            output!("gid: {}", gid);
         }
         (Some(u), None) => {
             let uid = uid_for_value(&u)?;
             nix::unistd::chown(p, Some(uid), None)
                 .map_err(|e| error::action_error(format!("chown: {}", e)))?;
-            WRITER.write(format!("uid: {}", uid));
+            output!("uid: {}", uid);
         }
         (Some(u), Some(g)) => {
             let uid = uid_for_value(&u)?;
             let gid = gid_for_value(&g)?;
             nix::unistd::chown(p, Some(uid), Some(gid))
                 .map_err(|e| error::action_error(format!("chown: {}", e)))?;
-            WRITER.write(format!("uid: {}", uid));
-            WRITER.write(format!("gid: {}", gid));
+            output!("uid: {}", uid);
+            output!("gid: {}", gid);
         }
     }
     Ok(())

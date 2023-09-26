@@ -1,7 +1,7 @@
 use mlua::{Error as LuaError, Lua, Table};
 
 use crate::error::{io_error, task_error, TaskError};
-use crate::{Result, WRITER};
+use crate::{output, Result};
 use std::{io::Error as IoError, process::Command};
 
 use super::util::exit_status;
@@ -207,10 +207,10 @@ fn group_exists(name: &str) -> Result<bool, IoError> {
 pub fn user(lua: &Lua) -> Result<(), TaskError> {
     let f = lua.create_function(|_ctx, (name, opts): (String, Table)| {
         if user_exists(&name).map_err(io_error)? {
-            WRITER.write(format!("Modify user {}", name));
+            output!("Modify user {}", name);
             modify_user(UserModDef::from_lua(name, opts)?).map_err(task_error)?;
         } else {
-            WRITER.write(format!("Create user {}", name));
+            output!("Create user {}", name);
             create_user(UserModDef::from_lua(name, opts)?).map_err(task_error)?;
         }
         Ok(())
@@ -222,7 +222,7 @@ pub fn user(lua: &Lua) -> Result<(), TaskError> {
 pub fn user_exists_action(lua: &Lua) -> Result<(), TaskError> {
     let f = lua.create_function(|_ctx, name: String| {
         let e = user_exists(&name).map_err(io_error)?;
-        WRITER.write(format!("User {} exists: {}", name, e));
+        output!("User {} exists: {}", name, e);
 
         Ok(e)
     })?;
@@ -238,10 +238,10 @@ pub fn group(lua: &Lua) -> Result<(), TaskError> {
             ctx.create_table()?
         };
         if group_exists(&name).map_err(io_error)? {
-            WRITER.write(format!("Modify group {}", name));
+            output!("Modify group {}", name);
             modify_group(GroupModDef::from_lua(name, opts)?).map_err(task_error)?;
         } else {
-            WRITER.write(format!("Create group {}", name));
+            output!("Create group {}", name);
             create_group(GroupModDef::from_lua(name, opts)?).map_err(task_error)?;
         }
         Ok(())
@@ -253,7 +253,7 @@ pub fn group(lua: &Lua) -> Result<(), TaskError> {
 pub fn group_exists_action(lua: &Lua) -> Result<(), TaskError> {
     let f = lua.create_function(|_ctx, name: String| {
         let e = group_exists(&name).map_err(io_error)?;
-        WRITER.write(format!("Group {} exists: {}", name, e));
+        output!("Group {} exists: {}", name, e);
 
         Ok(e)
     })?;

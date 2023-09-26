@@ -5,8 +5,7 @@ use tempfile::NamedTempFile;
 
 use super::util::exit_status;
 use crate::error::{action_error, io_error, TaskError};
-use crate::Result;
-use crate::WRITER;
+use crate::{indent_output, output, Result};
 
 struct ProcessOutput {
     status: i32,
@@ -63,9 +62,8 @@ pub fn shell(lua: &Lua) -> Result<(), TaskError> {
             ctx.create_table()?
         };
 
-        WRITER.write(format!("exec [ {} ]:", &cmd));
+        output!("exec [ {} ]:", &cmd);
 
-        let _guard = WRITER.enter("shell");
         let inherit_env = opts.get::<_, Option<bool>>("inherit_env")?.unwrap_or(true);
         let env = opts
             .get::<_, Option<HashMap<String, String>>>("env")?
@@ -90,18 +88,17 @@ pub fn shell(lua: &Lua) -> Result<(), TaskError> {
         let retval = ctx.create_table()?;
         retval.set("status", output.status)?;
         if echo && stdout && !output.stdout.is_empty() {
-            WRITER.write("stdout:");
-            let _g = WRITER.enter("stdout");
-            WRITER.write(&output.stdout);
+            indent_output!(1, "stdout:");
+            indent_output!(2, "{}", &output.stdout);
         }
         if echo && stderr && !output.stderr.is_empty() {
-            WRITER.write("stderr:");
-            let _g = WRITER.enter("stderr");
-            WRITER.write(&output.stderr);
+            indent_output!(1, "stderr:");
+
+            indent_output!(2, "{}", &output.stderr);
         }
         retval.set("stdout", output.stdout)?;
         retval.set("stderr", output.stderr)?;
-        WRITER.write(&format!("exit: {}", output.status));
+        indent_output!(1, "exit: {}", output.status);
         if !ignore_exit && output.status != 0 {
             return Err(action_error(format!(
                 "Command failed with exit code {}",
@@ -126,12 +123,11 @@ pub fn exec(lua: &Lua) -> Result<(), TaskError> {
             .get::<_, Option<Vec<String>>>("args")?
             .unwrap_or_else(Vec::new);
         if args.is_empty() {
-            WRITER.write(format!("exec [ {} ]:", &cmd));
+            output!("exec [ {} ]:", &cmd);
         } else {
             let args_display = &args.join(" ");
-            WRITER.write(format!("exec [ {} {} ]:", &cmd, &args_display));
+            output!("exec [ {} {} ]:", &cmd, &args_display);
         }
-        let _guard = WRITER.enter("exec");
         let inherit_env = opts.get::<_, Option<bool>>("inherit_env")?.unwrap_or(true);
         let env = opts
             .get::<_, Option<HashMap<String, String>>>("env")?
@@ -145,18 +141,16 @@ pub fn exec(lua: &Lua) -> Result<(), TaskError> {
         let retval = ctx.create_table()?;
         retval.set("status", output.status)?;
         if echo && stdout && !output.stdout.is_empty() {
-            WRITER.write("stdout:");
-            let _g = WRITER.enter("stdout");
-            WRITER.write(&output.stdout);
+            output!("  stdout:");
+            output!("    {}", &output.stdout);
         }
         if echo && stderr && !output.stderr.is_empty() {
-            WRITER.write("stderr:");
-            let _g = WRITER.enter("stderr");
-            WRITER.write(&output.stderr);
+            output!("  stderr:");
+            output!("    {}", &output.stderr);
         }
         retval.set("stdout", output.stdout)?;
         retval.set("stderr", output.stderr)?;
-        WRITER.write(&format!("exit: {}", output.status));
+        output!("  exit: {}", output.status);
         if !ignore_exit && output.status != 0 {
             return Err(action_error(format!(
                 "Command failed with exit code {}",

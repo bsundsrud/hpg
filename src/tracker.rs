@@ -1,130 +1,151 @@
 use std::{
+    borrow::Cow,
+    fmt::Arguments,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
-use console::Term;
-use indicatif::{MultiProgress, ProgressBar};
+use console::{style, Term};
+use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressStyle};
 use lazy_static::lazy_static;
-
-pub struct TaskContext {
-    pb: ProgressBar,
-    bars: MultiProgress,
-    description: String,
-}
-
-impl TaskContext {
-    fn new(bars: MultiProgress, description: &str) -> Self {
-        let pb = ProgressBar::new_spinner();
-        pb.enable_steady_tick(Duration::from_millis(200));
-        pb.set_message(description.to_string());
-        Self {
-            pb,
-            bars,
-            description: description.to_string(),
-        }
-    }
-
-    pub fn println<S: AsRef<str>>(&self, msg: S) {
-        self.bars
-            .suspend(|| console::Term::stdout().write_line(msg.as_ref()))
-            .unwrap();
-    }
-}
-
-impl Drop for TaskContext {
-    fn drop(&mut self) {
-        self.bars.remove(&self.pb);
-    }
-}
-
-pub struct RunContext {
-    pb: ProgressBar,
-}
-
-impl RunContext {
-    fn new(tasks: u64) -> Self {
-        let pb = ProgressBar::new(tasks);
-        Self { pb }
-    }
-}
-
-impl Drop for RunContext {
-    fn drop(&mut self) {
-        println!("RC Drop");
-    }
-}
 
 pub struct PrettyTracker {
     console: Term,
     bars: MultiProgress,
+    run_bar: Mutex<Option<ProgressBar>>,
+    current_task: Mutex<Option<String>>,
+    started: Mutex<Option<Instant>>,
 }
 
 impl PrettyTracker {
     pub fn new() -> Self {
+        let bars = MultiProgress::new();
+        bars.set_alignment(indicatif::MultiProgressAlignment::Top);
         Self {
             console: Term::stdout(),
-            bars: MultiProgress::new(),
+            bars,
+            run_bar: Mutex::new(None),
+            current_task: Mutex::new(None),
+            started: Mutex::new(None),
         }
     }
 
-    pub fn println<S: AsRef<str>>(&self, msg: S) {
+    pub fn println(&self, args: Arguments) {
+        self.bars.suspend(|| {
+            self.console.write_line(&args.to_string()).unwrap();
+        });
+    }
+
+    pub fn indent_println(&self, indent: usize, args: Arguments) {
+        let s = args.to_string();
+        let indent_str = " ".repeat(indent * 2);
+        let mut lines = Vec::new();
+        for line in s.lines() {
+            lines.push(format!("{}{}", indent_str, line));
+        }
+
+        let output = lines.join("\n");
         self.bars
-            .suspend(|| self.console.write_line(msg.as_ref()))
-            .unwrap();
+            .suspend(|| self.console.write_line(&output).unwrap());
+    }
+
+    pub fn task<S: Into<String>>(&self, msg: S) {
+        let m = msg.into();
+        *self.current_task.lock().unwrap() = Some(m.clone());
+        if let Some(rb) = &*self.run_bar.lock().unwrap() {
+            rb.set_message(m);
+        }
+    }
+
+    pub fn run(&self, count: u64) {
+        let mut rb = self.run_bar.lock().unwrap();
+        if rb.is_none() {
+            let bar = ProgressBar::new(count).with_style(
+                ProgressStyle::with_template("[{pos}/{len}] ({elapsed}) {spinner} {msg}").unwrap(),
+            );
+
+            bar.enable_steady_tick(Duration::from_millis(200));
+            self.bars.add(bar.clone());
+            *rb = Some(bar);
+        }
+        *self.started.lock().unwrap() = Some(Instant::now());
+    }
+
+    pub fn task_success(&self) {
+        let mut task = self.current_task.lock().unwrap();
+        if let Some(t) = &*task {
+            let _ = self
+                .bars
+                .println(format!("{} {}", style("✓ SUCCESS").green(), t));
+        }
+        *task = None;
+        if let Some(rb) = &*self.run_bar.lock().unwrap() {
+            rb.inc(1);
+        }
+    }
+
+    pub fn task_skip(&self) {
+        let mut task = self.current_task.lock().unwrap();
+        if let Some(t) = &*task {
+            let _ = self
+                .bars
+                .println(format!("{} {}", style("⧖ SKIPPED").cyan(), t));
+        }
+        *task = None;
+        if let Some(rb) = &*self.run_bar.lock().unwrap() {
+            rb.inc(1);
+        }
+    }
+
+    pub fn task_fail(&self) {
+        let mut task = self.current_task.lock().unwrap();
+        if let Some(t) = &*task {
+            let _ = self
+                .bars
+                .println(format!("{} {}", style("✗ FAILED").red(), t));
+        }
+        *task = None;
+        if let Some(rb) = &*self.run_bar.lock().unwrap() {
+            rb.inc(1);
+        }
+    }
+
+    pub fn finish_success(&self) {
+        let msg = if let Some(started) = &*self.started.lock().unwrap() {
+            format!(
+                "{} Done in {}.",
+                style("✓").green(),
+                HumanDuration(started.elapsed())
+            )
+        } else {
+            format!("{} Done.", style("✓").green())
+        };
+        if let Some(rb) = &*self.run_bar.lock().unwrap() {
+            rb.finish_and_clear();
+            println!("{}", msg);
+        }
+    }
+
+    pub fn finish_fail(&self) {
+        let msg = if let Some(started) = &*self.started.lock().unwrap() {
+            format!(
+                "{} One or more tasks failed or were skipped. Done in {}.",
+                style("✗").red(),
+                HumanDuration(started.elapsed())
+            )
+        } else {
+            format!(
+                "{} One or more tasks failed or were skipped.",
+                style("✗").red()
+            )
+        };
+        if let Some(rb) = &*self.run_bar.lock().unwrap() {
+            rb.finish_and_clear();
+            println!("{}", msg);
+        }
     }
 }
 
 lazy_static! {
     pub static ref TRACKER: PrettyTracker = PrettyTracker::new();
-    pub static ref OUTPUT: Output = Output::new();
-}
-
-pub struct Output {
-    tracker: PrettyTracker,
-    current_run: Mutex<Option<Arc<RunContext>>>,
-    current_task: Mutex<Option<Arc<TaskContext>>>,
-}
-
-impl Output {
-    fn new() -> Self {
-        Self {
-            tracker: PrettyTracker::new(),
-            current_run: Mutex::new(None),
-            current_task: Mutex::new(None),
-        }
-    }
-
-    pub fn tracker(&self) -> &PrettyTracker {
-        &self.tracker
-    }
-
-    pub fn println<S: AsRef<str>>(&self, msg: S) {
-        self.tracker.println(msg)
-    }
-
-    pub fn run(&self, tasks: u64) -> Arc<RunContext> {
-        let rc = RunContext::new(tasks);
-        self.tracker.bars.add(rc.pb.clone());
-        let arc = Arc::new(rc);
-        *self.current_run.lock().unwrap() = Some(arc.clone());
-        arc
-    }
-
-    pub fn task(&self, description: &str) -> Arc<TaskContext> {
-        let tc = TaskContext::new(self.tracker.bars.clone(), description);
-        self.tracker.bars.add(tc.pb.clone());
-        let arc = Arc::new(tc);
-        *self.current_task.lock().unwrap() = Some(arc.clone());
-        arc
-    }
-
-    pub fn current_task(&self) -> Arc<TaskContext> {
-        let what = &*self.current_task.lock().unwrap();
-        if let Some(rc) = what {
-            rc.clone()
-        } else {
-            panic!("no current task");
-        }
-    }
 }

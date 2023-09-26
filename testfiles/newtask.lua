@@ -4,7 +4,6 @@ end)
 
 local depC = task("dep C", function()
     echo("depC")
-
 end)
 
 local depA = task("dep A", depC, function()
@@ -16,3 +15,11 @@ Entry = task("main task", { depA, depB }, function()
 end)
 
 target(Entry, depA)
+
+shell_cmd = task("Run a shell command", Entry, function()
+    shell("ls")
+end)
+
+ls_cmd = task("Run ls -l", shell_cmd, function()
+    shell("ls -l")
+end)

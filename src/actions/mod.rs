@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{error::TaskError, task::TaskResult, Result, WRITER};
+use crate::{error::TaskError, output, task::TaskResult, Result};
 mod access;
 mod file;
 mod process;
@@ -43,9 +43,8 @@ fn format_lua_value(ctx: &Lua, v: mlua::Value) -> Result<String, mlua::Error> {
 
 pub fn echo(lua: &Lua) -> Result<(), TaskError> {
     let f = lua.create_function(|ctx: &Lua, msg: mlua::Value| {
-        WRITER.write("echo:");
-        let _guard = WRITER.enter("echo");
-        WRITER.write(format_lua_value(ctx, msg)?);
+        output!("echo:");
+        output!("  {}", format_lua_value(ctx, msg)?);
         Ok(())
     })?;
     lua.globals().set("echo", f)?;
@@ -55,9 +54,8 @@ pub fn echo(lua: &Lua) -> Result<(), TaskError> {
 
 pub fn fail(lua: &Lua) -> Result<(), TaskError> {
     let f = lua.create_function::<_, (), _>(|_, msg: String| {
-        WRITER.write("fail:");
-        let _guard = WRITER.enter("fail");
-        WRITER.write(&msg);
+        output!("fail:");
+        output!("  {}", &msg);
         Err(mlua::Error::ExternalError(Arc::new(
             TaskError::ActionError(msg),
         )))
@@ -68,10 +66,9 @@ pub fn fail(lua: &Lua) -> Result<(), TaskError> {
 
 pub fn cancel(lua: &Lua) -> Result<(), TaskError> {
     let f = lua.create_function(|_, msg: Option<String>| {
-        WRITER.write("cancel:");
-        let _guard = WRITER.enter("cancel");
+        output!("cancel:");
         if let Some(ref m) = msg {
-            WRITER.write(&m);
+            output!("  {}", &m);
         }
         Ok(TaskResult::Incomplete(msg))
     })?;
@@ -81,10 +78,9 @@ pub fn cancel(lua: &Lua) -> Result<(), TaskError> {
 
 pub fn success(lua: &Lua) -> Result<(), TaskError> {
     let f = lua.create_function(|_, msg: Option<String>| {
-        WRITER.write("success:");
-        let _guard = WRITER.enter("success");
+        output!("success:");
         if let Some(ref m) = msg {
-            WRITER.write(&m);
+            output!("  {}", &m);
         }
         Ok(TaskResult::Success)
     })?;

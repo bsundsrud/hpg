@@ -1,18 +1,18 @@
+use console::style;
 use error::HpgError;
 use lazy_static::lazy_static;
+
 use output::StructuredWriter;
 use std::collections::HashMap;
 use std::fs::File;
 use structopt::StructOpt;
 use task::LuaState;
 use task::Variables;
-use tracker::PrettyTracker;
-use tracker::OUTPUT;
-use tracker::TRACKER;
 
 pub(crate) mod actions;
 mod error;
 mod hash;
+mod macros;
 pub(crate) mod modules;
 mod output;
 mod task;
@@ -23,10 +23,6 @@ use std::io::prelude::*;
 use std::io::BufReader;
 
 use crate::output::Target;
-
-lazy_static! {
-    pub static ref WRITER: StructuredWriter = StructuredWriter::new(Target::Stdout);
-}
 
 fn load_file(fname: &str) -> Result<String, HpgError> {
     let f = File::open(fname)?;
@@ -152,10 +148,9 @@ fn run_hpg() -> Result<()> {
     };
     let lua = lua.eval(&code, v)?;
     if opt.list {
-        let _guard = WRITER.enter("targets");
-        OUTPUT.println("Available Tasks:");
+        output!("{}", style("Available Tasks").cyan());
         for (name, task) in lua.available_targets() {
-            OUTPUT.println(format!("  {}: {}", name, task.description()));
+            indent_output!(1, "{}: {}", style(name).green(), task.description());
         }
         return Ok(());
     }
@@ -163,6 +158,10 @@ fn run_hpg() -> Result<()> {
     lua.execute(&requested_tasks, opt.run_defaults, opt.show)?;
 
     Ok(())
+}
+
+lazy_static! {
+    pub static ref WRITER: StructuredWriter = StructuredWriter::new(Target::Stdout);
 }
 
 #[tokio::main]
@@ -175,7 +174,7 @@ async fn main() -> Result<()> {
                 error::TaskError::LuaError(l) => eprintln!("Lua Error: {}", l),
                 error::TaskError::IoError(i) => eprintln!("IO Error: {}", i),
                 error::TaskError::ActionError(a) => eprintln!("Error in action: {}", a),
-                error::TaskError::SkippedTask => eprintln!("Skipped Task."),
+                error::TaskError::SkippedTask => {}
                 error::TaskError::TemplateError(t) => eprintln!("Error in template: {}", t),
                 error::TaskError::DbusError(d) => eprintln!("Dbus error: {}", d),
             },
