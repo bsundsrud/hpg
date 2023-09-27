@@ -11,7 +11,7 @@ use nix::unistd::{geteuid, User};
 use crate::{
     actions::util,
     error::{self, TaskError},
-    hash, Result, WRITER,
+    hash, indent_output, output, Result,
 };
 
 pub struct HpgFile {
@@ -35,8 +35,7 @@ impl UserData for HpgFile {
         });
 
         methods.add_method("contents", |_, this, _: ()| {
-            WRITER.write(format!("file_contents {}", &this.path.to_string_lossy()));
-            let _g = WRITER.enter("file_contents");
+            output!("file_contents {}", &this.path.to_string_lossy());
 
             let contents = util::read_file(&this.path).map_err(error::io_error)?;
             Ok(contents)
@@ -52,8 +51,7 @@ impl UserData for HpgFile {
         methods.add_method("chown", |_, this, opts: Table| {
             let user: Option<mlua::Value> = opts.get("user")?;
             let group: Option<mlua::Value> = opts.get("group")?;
-            WRITER.write(format!("Chown {}:", &this.path.to_string_lossy()));
-            let _g = WRITER.enter("chown");
+            output!("Chown {}:", &this.path.to_string_lossy());
 
             util::run_chown(&this.path, user, group)?;
             Ok(HpgFile::new(&this.path))
@@ -61,8 +59,7 @@ impl UserData for HpgFile {
         methods.add_method("chmod", |_, this, mode: String| {
             let mode = u32::from_str_radix(&mode, 8)
                 .map_err(|e| error::action_error(format!("Invalid Mode {}: {}", mode, e)))?;
-            WRITER.write(format!("Chmod {} {}", &this.path.to_string_lossy(), mode));
-            let _g = WRITER.enter("chmod");
+            output!("Chmod {} {}", &this.path.to_string_lossy(), mode);
 
             let f = File::open(&this.path).map_err(error::io_error)?;
             f.set_permissions(Permissions::from_mode(mode))
@@ -75,13 +72,12 @@ impl UserData for HpgFile {
             let cwd = Path::new(".");
             let dst = cwd.join(&dst);
 
-            WRITER.write(format!(
+            output!(
                 "copy {} to {}",
                 &this.path.to_string_lossy(),
                 &dst.to_string_lossy()
-            ));
+            );
 
-            let _g = WRITER.enter("copy");
             let updated: bool;
             if should_update_file(&dst, &src_contents).map_err(error::io_error)? {
                 let mut outfile = OpenOptions::new()
@@ -95,7 +91,7 @@ impl UserData for HpgFile {
                     .map_err(error::io_error)?;
                 updated = true;
             } else {
-                WRITER.write("files matched, skipped");
+                indent_output!(1, "files matched, skipped");
                 updated = false;
             }
             Ok(updated)
@@ -105,13 +101,11 @@ impl UserData for HpgFile {
             |ctx, this, (dst, template_context): (String, Option<Table>)| {
                 let cwd = Path::new(".");
                 let dst = cwd.join(&dst);
-                WRITER.write(format!(
+                output!(
                     "render template {} to {}",
                     &this.path.to_string_lossy(),
                     &dst.to_string_lossy()
-                ));
-                let _g = WRITER.enter("template");
-
+                );
                 let template_context = if let Some(c) = template_context {
                     c
                 } else {
@@ -135,7 +129,7 @@ impl UserData for HpgFile {
                         .map_err(error::io_error)?;
                     updated = true;
                 } else {
-                    WRITER.write("files matched, skipped");
+                    indent_output!(1, "files matched, skipped");
                     updated = false;
                 }
                 Ok(updated)
@@ -144,12 +138,11 @@ impl UserData for HpgFile {
         methods.add_method("symlink", |_, this, dst: String| {
             let cwd = Path::new(".");
             let dst = cwd.join(&dst);
-            WRITER.write(format!(
+            output!(
                 "Symlink {} to {}",
                 &this.path.to_string_lossy(),
                 &dst.to_string_lossy()
-            ));
-            let _g = WRITER.enter("symlink_file");
+            );
             if dst.exists() {
                 std::fs::remove_file(&dst).map_err(error::io_error)?;
             }
@@ -158,8 +151,7 @@ impl UserData for HpgFile {
         });
 
         methods.add_method("touch", |_, this, _: ()| {
-            WRITER.write(format!("touch {}", &this.path.to_string_lossy()));
-            let _g = WRITER.enter("touch");
+            output!("touch {}", &this.path.to_string_lossy());
             let f = OpenOptions::new()
                 .write(true)
                 .create(true)
@@ -170,9 +162,7 @@ impl UserData for HpgFile {
         });
 
         methods.add_method("append", |_, this, opts: Table| {
-            WRITER.write(format!("append to {}", &this.path.to_string_lossy()));
-            let _g = WRITER.enter("append");
-
+            output!("append to {}", &this.path.to_string_lossy());
             let src = opts.get::<_, Option<String>>("src")?;
             let contents = opts.get::<_, Option<String>>("contents")?;
             let input = match (src, contents) {
@@ -200,11 +190,7 @@ impl UserData for HpgFile {
         methods.add_method("append_template", |ctx, this, opts: Table| {
             let src = opts.get::<_, Option<String>>("src")?;
             let contents = opts.get::<_, Option<String>>("contents")?;
-            WRITER.write(format!(
-                "append template to {}",
-                &this.path.to_string_lossy()
-            ));
-            let _g = WRITER.enter("append_template");
+            output!("append template to {}", &this.path.to_string_lossy());
 
             let input = match (src, contents) {
                 (None, None) => {
@@ -268,8 +254,7 @@ impl UserData for HpgDir {
         methods.add_method("chown", |_, this, opts: Table| {
             let user: Option<mlua::Value> = opts.get("user")?;
             let group: Option<mlua::Value> = opts.get("group")?;
-            WRITER.write(format!("Chown {}:", &this.path.to_string_lossy()));
-            let _g = WRITER.enter("chown");
+            output!("Chown {}:", &this.path.to_string_lossy());
 
             util::run_chown(&this.path, user, group)?;
             Ok(HpgFile::new(&this.path))
@@ -277,13 +262,7 @@ impl UserData for HpgDir {
         methods.add_method("chmod", |_, this, mode_str: String| {
             let mode = u32::from_str_radix(&mode_str, 8)
                 .map_err(|e| error::action_error(format!("Invalid Mode {}: {}", mode_str, e)))?;
-            WRITER.write(format!(
-                "Chmod {} {}",
-                &this.path.to_string_lossy(),
-                mode_str
-            ));
-            let _g = WRITER.enter("chmod");
-
+            output!("Chmod {} {}", &this.path.to_string_lossy(), mode_str);
             let f = File::open(&this.path).map_err(error::io_error)?;
             f.set_permissions(Permissions::from_mode(mode))
                 .map_err(error::io_error)?;
@@ -292,8 +271,7 @@ impl UserData for HpgDir {
         });
 
         methods.add_method("mkdir", |_, this, _: ()| {
-            WRITER.write(format!("mkdir {}", &this.path.to_string_lossy()));
-            WRITER.enter("mkdir");
+            output!("mkdir {}", &this.path.to_string_lossy());
 
             std::fs::create_dir_all(&this.path).map_err(error::io_error)?;
             Ok(HpgDir::new(&this.path))
@@ -302,12 +280,11 @@ impl UserData for HpgDir {
         methods.add_method("symlink", |_, this, dst: String| {
             let cwd = Path::new(".");
             let dst = cwd.join(&dst);
-            WRITER.write(format!(
+            output!(
                 "Symlink {} to {}",
                 &this.path.to_string_lossy(),
                 &dst.to_string_lossy()
-            ));
-            WRITER.enter("symlink_dir");
+            );
             if dst.exists() {
                 std::fs::remove_file(&dst).map_err(error::io_error)?;
             }
@@ -450,7 +427,7 @@ fn append_to_existing(
                     .map_err(error::io_error)?;
                 updated = true;
             } else {
-                WRITER.write("section matched, skipped");
+                indent_output!(1, "section matched, skipped");
                 updated = false;
             }
         } else {

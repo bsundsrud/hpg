@@ -8,12 +8,12 @@ use mlua::{Lua, Table, UserData};
 use reqwest::Url;
 
 use super::{archive::HpgArchive, file::HpgDir};
-use crate::Result;
 use crate::{
     actions::util,
     error::{self, TaskError},
-    WRITER,
+    indent_output,
 };
+use crate::{output, Result};
 
 #[derive(Debug)]
 pub enum InstallSource {
@@ -36,8 +36,7 @@ impl HpgInstaller {
         } else {
             return Err(error::action_error("Called download() on local file"));
         };
-        WRITER.write(format!("Downloading {} to {}", u, archive_path.display()));
-        let _g = WRITER.enter("installer_download");
+        indent_output!(1, "Downloading {} to {}", u, archive_path.display());
 
         let client = reqwest::blocking::Client::new();
         let builder = client.get(u.clone());
@@ -122,10 +121,9 @@ impl HpgInstaller {
                     error::action_error(format!("Invalid archive_path {}", &archive_path.display()))
                 })?;
                 std::fs::create_dir_all(&dir).map_err(error::io_error)?;
-                WRITER.write(format!("Installing {}", archive_path.display()));
-                let _g = WRITER.enter("installer_install");
+                output!("Installing {}", archive_path.display());
                 if self.hash_matches() {
-                    WRITER.write("Hashes matched, skipped install");
+                    indent_output!(1, "Hashes matched, skipped install");
                     return Ok(HpgDir::new(&self.extract_dir));
                 }
                 let archive = self.download()?;
@@ -139,10 +137,10 @@ impl HpgInstaller {
                 }
             }
             InstallSource::File(f) => {
-                WRITER.write(format!("Installing {}", f.display()));
-                let _g = WRITER.enter("installer_install");
+                output!("Installing {}", f.display());
+
                 if self.hash_matches() {
-                    WRITER.write("Hashes matched, skipped install");
+                    indent_output!(1, "Hashes matched, skipped install");
                     return Ok(HpgDir::new(&self.extract_dir));
                 }
                 if let Some(ty) = HpgArchive::guess_archive_type(&f.to_string_lossy()) {

@@ -8,7 +8,7 @@ use zip::ZipArchive;
 use mlua::{Lua, Table, UserData};
 
 use crate::error::{self, TaskError};
-use crate::{Result, WRITER};
+use crate::{output, Result};
 
 use super::file::HpgDir;
 
@@ -102,12 +102,11 @@ impl UserData for HpgArchive {
     fn add_methods<'lua, T: mlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
         methods.add_method("extract", |_ctx, this, dst: String| {
             let dst = Path::new(".").join(&dst);
-            WRITER.write(format!(
+            output!(
                 "Extract {} to {}",
                 &this.path.to_string_lossy(),
                 &dst.to_string_lossy()
-            ));
-            let _ = WRITER.enter("archive_extract");
+            );
             this.extract(&dst)
         });
     }

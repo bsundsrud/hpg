@@ -1,6 +1,5 @@
 use crate::error::TaskError;
-use crate::Result;
-use crate::WRITER;
+use crate::{indent_output, output, Result};
 
 pub(crate) mod apt;
 
@@ -37,8 +36,7 @@ pub trait PackageManager {
         &self,
         packages: &[InstallRequest],
     ) -> Result<Vec<PackageStatus>, TaskError> {
-        WRITER.write("install packages:");
-        let _g = WRITER.enter("package_install");
+        output!("install packages:");
         let mut requests: Vec<InstallRequest> = Vec::new();
         for package in packages {
             let p = self.package_status(&package.name)?;
@@ -47,23 +45,27 @@ pub trait PackageManager {
                     if *requested_v != installed_v {
                         requests.push(package.clone());
                     } else {
-                        WRITER.write(format!(
+                        indent_output!(
+                            1,
                             "{} {}: already installed, skipping...",
-                            package.name, installed_v
-                        ));
+                            package.name,
+                            installed_v
+                        );
                     }
                 } else {
-                    WRITER.write(format!(
+                    indent_output!(
+                        1,
                         "{} {}: already installed, skipping...",
-                        package.name, installed_v
-                    ));
+                        package.name,
+                        installed_v
+                    );
                 }
             } else {
                 requests.push(package.clone());
             }
         }
         if requests.is_empty() {
-            WRITER.write("No packages to install.");
+            output!("No packages to install.");
             return Ok(Vec::new());
         }
         self.call_install(&requests)?;

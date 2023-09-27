@@ -2,7 +2,6 @@ use console::style;
 use error::HpgError;
 use lazy_static::lazy_static;
 
-use output::StructuredWriter;
 use std::collections::HashMap;
 use std::fs::File;
 use structopt::StructOpt;
@@ -14,15 +13,13 @@ mod error;
 mod hash;
 mod macros;
 pub(crate) mod modules;
-mod output;
+
 mod task;
 mod tracker;
 
 pub type Result<T, E = HpgError> = core::result::Result<T, E>;
 use std::io::prelude::*;
 use std::io::BufReader;
-
-use crate::output::Target;
 
 fn load_file(fname: &str) -> Result<String, HpgError> {
     let f = File::open(fname)?;
@@ -158,10 +155,6 @@ fn run_hpg() -> Result<()> {
     lua.execute(&requested_tasks, opt.run_defaults, opt.show)?;
 
     Ok(())
-}
-
-lazy_static! {
-    pub static ref WRITER: StructuredWriter = StructuredWriter::new(Target::Stdout);
 }
 
 #[tokio::main]

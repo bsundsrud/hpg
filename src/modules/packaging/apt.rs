@@ -1,6 +1,6 @@
 use std::process::{Command, Output, Stdio};
 
-use crate::{actions::util::exit_status, error::TaskError, WRITER};
+use crate::{actions::util::exit_status, error::TaskError, indent_output, output};
 
 use super::{InstallStatus, PackageManager, PackageStatus, Version};
 
@@ -84,20 +84,17 @@ impl AptManager {
 
 impl PackageManager for AptManager {
     fn call_update_repos(&self) -> Result<(), TaskError> {
-        WRITER.write("update repos:");
-        let _g = WRITER.enter("update_repo");
+        output!("update repos:");
         let output = self.call_aptget(&["update"])?;
         if output.stdout.len() > 0 {
-            WRITER.write("stdout:");
-            let _g = WRITER.enter("stdout");
-            WRITER.write(String::from_utf8_lossy(&output.stdout));
+            indent_output!(1, "stdout:");
+            indent_output!(2, "{}", String::from_utf8_lossy(&output.stdout));
         }
         if output.stderr.len() > 0 {
-            WRITER.write("stderr:");
-            let _g = WRITER.enter("stderr");
-            WRITER.write(String::from_utf8_lossy(&output.stderr));
+            indent_output!(1, "stderr:");
+            indent_output!(2, "{}", String::from_utf8_lossy(&output.stderr));
         }
-        WRITER.write(format!("exit code: {}", exit_status(&output.status)));
+        indent_output!(1, "exit code: {}", exit_status(&output.status));
         if output.status.success() {
             Ok(())
         } else {
@@ -125,18 +122,17 @@ impl PackageManager for AptManager {
             .collect();
         let mut args = vec!["install", "-y"];
         args.extend(packages.iter().map(|s| s.as_str()));
+        output!("install:");
         let output = self.call_aptget(&args)?;
         if output.stdout.len() > 0 {
-            WRITER.write("stdout:");
-            let _g = WRITER.enter("stdout");
-            WRITER.write(String::from_utf8_lossy(&output.stdout));
+            indent_output!(1, "stdout:");
+            indent_output!(2, "{}", String::from_utf8_lossy(&output.stdout));
         }
         if output.stderr.len() > 0 {
-            WRITER.write("stderr:");
-            let _g = WRITER.enter("stderr");
-            WRITER.write(String::from_utf8_lossy(&output.stderr));
+            indent_output!(1, "stderr:");
+            indent_output!(2, "{}", String::from_utf8_lossy(&output.stderr));
         }
-        WRITER.write(format!("exit code: {}", exit_status(&output.status)));
+        indent_output!(1, "exit code: {}", exit_status(&output.status));
 
         if !output.status.success() {
             return Err(TaskError::ActionError(format!(
@@ -150,18 +146,17 @@ impl PackageManager for AptManager {
     fn call_remove(&self, packages: &[&str]) -> crate::Result<(), TaskError> {
         let mut args = vec!["remove", "-y"];
         args.extend(packages);
+        output!("remove:");
         let output = self.call_aptget(&args)?;
         if output.stdout.len() > 0 {
-            WRITER.write("stdout:");
-            let _g = WRITER.enter("stdout");
-            WRITER.write(String::from_utf8_lossy(&output.stdout));
+            indent_output!(1, "stdout:");
+            indent_output!(2, "{}", String::from_utf8_lossy(&output.stdout));
         }
         if output.stderr.len() > 0 {
-            WRITER.write("stderr:");
-            let _g = WRITER.enter("stderr");
-            WRITER.write(String::from_utf8_lossy(&output.stderr));
+            indent_output!(1, "stderr:");
+            indent_output!(2, "{}", String::from_utf8_lossy(&output.stderr));
         }
-        WRITER.write(format!("exit code: {}", exit_status(&output.status)));
+        indent_output!(1, "exit code: {}", exit_status(&output.status));
 
         if !output.status.success() {
             return Err(TaskError::ActionError(format!(

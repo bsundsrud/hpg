@@ -1,5 +1,5 @@
 use crate::error::{self, TaskError};
-use crate::output;
+use crate::{indent_output, output};
 
 use mlua::{IntoLua, Lua, Table};
 use nix::unistd::{Gid, Group, Uid, User};
@@ -75,21 +75,21 @@ pub(crate) fn run_chown(
             let gid = gid_for_value(&g)?;
             nix::unistd::chown(p, None, Some(gid))
                 .map_err(|e| error::action_error(format!("chown: {}", e)))?;
-            output!("gid: {}", gid);
+            indent_output!(1, "gid: {}", gid);
         }
         (Some(u), None) => {
             let uid = uid_for_value(&u)?;
             nix::unistd::chown(p, Some(uid), None)
                 .map_err(|e| error::action_error(format!("chown: {}", e)))?;
-            output!("uid: {}", uid);
+            indent_output!(1, "uid: {}", uid);
         }
         (Some(u), Some(g)) => {
             let uid = uid_for_value(&u)?;
             let gid = gid_for_value(&g)?;
             nix::unistd::chown(p, Some(uid), Some(gid))
                 .map_err(|e| error::action_error(format!("chown: {}", e)))?;
-            output!("uid: {}", uid);
-            output!("gid: {}", gid);
+            indent_output!(1, "uid: {}", uid);
+            indent_output!(1, "gid: {}", gid);
         }
     }
     Ok(())

@@ -1,6 +1,6 @@
 use crate::{
     error::{self, TaskError},
-    Result, WRITER,
+    output, Result,
 };
 use mlua::{Lua, Table};
 
@@ -32,7 +32,7 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
             !already_updated
         };
         if !do_update {
-            WRITER.write("update repos: skip");
+            output!("update repos: skip");
             return Ok(do_update);
         }
         let apt = AptManager::new();
@@ -110,7 +110,7 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
         }
         let res_tbl = ctx.create_table()?;
         if found_missing {
-            WRITER.write("Ensure: Packages differ from request.");
+            output!("Ensure: Packages differ from request.");
             // Use warm apt cache if available, otherwise refresh
             let already_updated = ctx
                 .globals()
@@ -129,7 +129,7 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
             res_tbl.set("updated", true)?;
             res_tbl.set("packages", results)?;
         } else {
-            WRITER.write("Ensure: Packages all up-to-date.");
+            output!("Ensure: Packages all up-to-date.");
             res_tbl.set("updated", false)?;
             let blank = ctx.create_table()?;
             res_tbl.set("packages", blank)?;

@@ -1,6 +1,6 @@
 use crate::{
     error::{self, TaskError},
-    Result, WRITER,
+    output, Result,
 };
 use mlua::{Lua, Table, UserData};
 use reqwest::{
@@ -68,8 +68,7 @@ impl UserData for HpgUrl {
                 ctx.create_table()?
             };
             let builder = this.opts_to_request(&client, &opts)?;
-            WRITER.write(format!("GET {}", &this.url));
-            let _g = WRITER.enter("net_get");
+            output!("GET {}", &this.url);
             let res = builder
                 .send()
                 .map_err(|e| error::action_error(format!("{}", e)))?;
@@ -89,8 +88,7 @@ impl UserData for HpgUrl {
                 ctx.create_table()?
             };
             let builder = this.opts_to_request(&client, &opts)?;
-            WRITER.write(format!("GET JSON {}", &this.url));
-            let _g = WRITER.enter("net_json");
+            output!("GET JSON {}", &this.url);
             let res = builder
                 .send()
                 .map_err(|e| error::action_error(format!("{}", e)))?;
@@ -112,8 +110,7 @@ impl UserData for HpgUrl {
                 ctx.create_table()?
             };
             let builder = this.opts_to_request(&client, &opts)?;
-            WRITER.write(format!("Download {} to  {}", &this.url, &dst));
-            let _g = WRITER.enter("net_save");
+            output!("Download {} to  {}", &this.url, &dst);
             let mut res = builder
                 .send()
                 .map_err(|e| error::action_error(format!("{}", e)))?;
