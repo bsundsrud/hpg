@@ -157,8 +157,7 @@ fn run_hpg() -> Result<()> {
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     if let Err(e) = run_hpg() {
         match e {
             HpgError::TaskError(t) => match t {

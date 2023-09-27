@@ -382,6 +382,8 @@ impl EvaluatedLuaState {
                         } else {
                             output!("{}\n{}", cause, traceback);
                         }
+                        task_results
+                            .insert(task, TaskResult::Incomplete(Some("Error".to_string())));
                         break;
                     }
                     Err(e) => return Err(e.into()),
