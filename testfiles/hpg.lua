@@ -1,28 +1,28 @@
-task("foo", {}, function ()
+foo = task("foo task", {}, function ()
         print "from foo"
         echo "echoing from foo"
 end)
 
-task("bar", {"foo"}, function()
+bar = task("bar task", {foo}, function()
   print "from bar"
 end)
 
-task("baz", {"foo"}, function()
+baz = task("baz task", foo, function()
   print "from baz"
 end)
 
-task("quux", {"bar", "baz"}, function()
+quux = task("quux", {bar, baz}, function()
   print "from quux"
 end)
 
-task("roles", {}, function()
+roles = task("roles task", function()
   local meta = from_json(file_contents("meta.json"))
   echo(meta)
 end)
 
-task("empty", {"roles"})
+empty = task("empty task", roles)
 
-task("test-files", {}, function()
+test_files = task("test-files task", function()
   local f = file("meta.json")
   local meta = from_json(f:contents())
   echo(meta)
@@ -32,31 +32,34 @@ task("test-files", {}, function()
      :copy("copied-file")
 end)
 
-task("apt-update", {}, function()
+apt_update = task("apt-update", function()
         pkg.apt.update()
         pkg.apt.update()
         local s = pkg.apt.status("firefox")
         echo(s)
 end)
 
-task("other", function()
+other = task("other task", function()
         echo("sure")
 end)
 
-task("machine-info", function()
+machine_info = task("machine-info task", function()
         echo(machine)
 end)
 
-task("other", "middle", function()
+
+
+rootA = task("rootA", function()
+  echo("hello")
+end)
+
+rootB = task("rootB", function()
+  echo("world")
+end)
+
+middle = task("middle", {rootA, rootB})
+tree = task("tree dependencies", middle, function()
     echo("other")
   end)
 
-  task("middle", {"rootA", "rootB"})
-
-  task("rootA", function()
-    echo("hello")
-  end)
-
-  task("rootB", function()
-    echo("world")
-  end)
+  
