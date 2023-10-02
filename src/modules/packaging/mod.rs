@@ -89,7 +89,6 @@ pub trait PackageManager {
     }
 
     fn remove_packages(&self, packages: &[&str]) -> Result<Vec<PackageStatus>, TaskError> {
-        let packages: Vec<&str> = packages.into_iter().map(|p| p.as_ref()).collect();
         self.call_remove(&packages)?;
         let status = packages
             .iter()
