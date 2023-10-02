@@ -27,5 +27,5 @@ zbus = "3.7.0"
 zip = "0.6.3"
 mlua = { version = "0.9.1", features = ["lua54", "mlua_derive", "vendored", "macros"] }
 tokio = { version = "1.32.0", features = ["full"] }
-indicatif = { version = "0.17.7", features = ["tokio", "improved_unicode"] }
+indicatif = { version = "0.17.7", features = ["improved_unicode"] }
 console = "0.15.7"
