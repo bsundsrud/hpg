@@ -50,7 +50,7 @@ pub fn user(lua: &Lua) -> Result<(), TaskError> {
                 .ok_or_else(|| error::action_error("Unknown current effective user"))?
         };
         let def = UserDef::from_unix(user);
-        Ok(def.to_lua(&c)?)
+        def.to_lua(c)
     })?;
     lua.globals().set("user", f)?;
 

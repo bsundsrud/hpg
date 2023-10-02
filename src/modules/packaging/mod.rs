@@ -77,7 +77,7 @@ pub trait PackageManager {
         for s in status.iter() {
             match s.status {
                 InstallStatus::NotFound | InstallStatus::NotInstalled => {
-                    return Err(TaskError::ActionError(format!(
+                    return Err(TaskError::Action(format!(
                         "Failed to install {}",
                         s.package
                     )))
@@ -89,20 +89,14 @@ pub trait PackageManager {
     }
 
     fn remove_packages(&self, packages: &[&str]) -> Result<Vec<PackageStatus>, TaskError> {
-        self.call_remove(&packages)?;
+        self.call_remove(packages)?;
         let status = packages
             .iter()
             .map(|p| self.package_status(p))
             .collect::<Result<Vec<PackageStatus>, _>>()?;
         for s in status.iter() {
-            match s.status {
-                InstallStatus::Installed(_) => {
-                    return Err(TaskError::ActionError(format!(
-                        "Failed to remove {}",
-                        s.package
-                    )))
-                }
-                _ => {}
+            if let InstallStatus::Installed(_s) = &s.status {
+                return Err(TaskError::Action(format!("Failed to remove {}", s.package)));
             }
         }
         Ok(status)

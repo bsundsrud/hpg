@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, time::Duration};
+use std::{collections::HashMap, fmt::Display};
 
 use crate::{indent_output, output, tracker::TRACKER, Result};
 use anyhow::anyhow;
@@ -23,7 +23,7 @@ impl Display for TaskHandle {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Task {
-    id: TaskHandle,
+    pub id: TaskHandle,
     description: String,
     deps: Vec<Task>,
 }
@@ -40,28 +40,22 @@ impl Task {
     pub fn description(&self) -> &str {
         &self.description
     }
-
-    pub fn handle(&self) -> TaskHandle {
-        self.id
-    }
 }
 
 impl<'lua> FromLua<'lua> for Task {
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> mlua::Result<Self> {
+    fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> mlua::Result<Self> {
         match value {
             Value::UserData(ud) => {
                 if ud.is::<Task>() {
                     let t: &Task = &*ud.borrow::<Task>()?;
-                    return Ok(t.clone());
+                    Ok(t.clone())
                 } else {
-                    return Err(mlua::Error::runtime("UserData was not of type Task"));
+                    Err(mlua::Error::runtime("UserData was not of type Task"))
                 }
             }
-            _ => {
-                return Err(mlua::Error::runtime(
-                    "Only UserData can be converted to a Task",
-                ))
-            }
+            _ => Err(mlua::Error::runtime(
+                "Only UserData can be converted to a Task",
+            )),
         }
     }
 }
@@ -253,9 +247,9 @@ impl LuaState {
         self.lua
             .globals()
             .set("vars", v)
-            .map_err(|e| TaskError::ActionError(format!("Couldn't set vars global: {}", e)))?;
+            .map_err(|e| TaskError::Action(format!("Couldn't set vars global: {}", e)))?;
 
-        self.eval_string(&src)?;
+        self.eval_string(src)?;
         self.find_tasks()?;
         let graph = GraphState::from_registry(self.registry.clone());
         Ok(EvaluatedLuaState {
@@ -284,7 +278,7 @@ impl EvaluatedLuaState {
             if let Some(task) = self.registry.task_for_name(t) {
                 requested_handles.push(task);
             } else {
-                return Err(TaskError::ActionError(format!("Unknown task {}", t)));
+                return Err(TaskError::Action(format!("Unknown task {}", t)));
             }
         }
         Ok(requested_handles)
@@ -382,6 +376,7 @@ impl EvaluatedLuaState {
                         } else {
                             output!("{}\n{}", cause, traceback);
                         }
+                        TRACKER.task_fail();
                         task_results
                             .insert(task, TaskResult::Incomplete(Some("Error".to_string())));
                         break;

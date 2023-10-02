@@ -19,7 +19,7 @@ impl AptManager {
             .stderr(Stdio::piped())
             .output()?;
         if !output.status.success() {
-            return Err(TaskError::ActionError(format!(
+            return Err(TaskError::Action(format!(
                 "Apt-get call failed: {}",
                 String::from_utf8_lossy(&output.stderr)
             )));
@@ -45,7 +45,7 @@ impl AptManager {
                     status: InstallStatus::NotFound,
                 });
             }
-            return Err(TaskError::ActionError(format!(
+            return Err(TaskError::Action(format!(
                 "Dpkg-query call failed: {}",
                 stderr
             )));
@@ -54,13 +54,13 @@ impl AptManager {
         let mut parts = stdout.split("||");
         let status = parts
             .next()
-            .ok_or_else(|| TaskError::ActionError(format!("Bad dpkg-query status: {}", stdout)))?;
-        let desired = parts.next().ok_or_else(|| {
-            TaskError::ActionError(format!("Bad dpkg-query status-want: {}", stdout))
-        })?;
+            .ok_or_else(|| TaskError::Action(format!("Bad dpkg-query status: {}", stdout)))?;
+        let desired = parts
+            .next()
+            .ok_or_else(|| TaskError::Action(format!("Bad dpkg-query status-want: {}", stdout)))?;
         let version = parts
             .next()
-            .ok_or_else(|| TaskError::ActionError(format!("Bad dpkg-query version: {}", stdout)))?;
+            .ok_or_else(|| TaskError::Action(format!("Bad dpkg-query version: {}", stdout)))?;
         let requested_install = desired.starts_with("install");
         let is_installed = status.starts_with("installed");
         if requested_install && is_installed {
@@ -86,11 +86,11 @@ impl PackageManager for AptManager {
     fn call_update_repos(&self) -> Result<(), TaskError> {
         output!("update repos:");
         let output = self.call_aptget(&["update"])?;
-        if output.stdout.len() > 0 {
+        if !output.stdout.is_empty() {
             indent_output!(1, "stdout:");
             indent_output!(2, "{}", String::from_utf8_lossy(&output.stdout));
         }
-        if output.stderr.len() > 0 {
+        if !output.stderr.is_empty() {
             indent_output!(1, "stderr:");
             indent_output!(2, "{}", String::from_utf8_lossy(&output.stderr));
         }
@@ -98,7 +98,7 @@ impl PackageManager for AptManager {
         if output.status.success() {
             Ok(())
         } else {
-            Err(TaskError::ActionError(format!(
+            Err(TaskError::Action(format!(
                 "Failed updating repos: {}",
                 String::from_utf8_lossy(&output.stderr)
             )))
@@ -124,18 +124,18 @@ impl PackageManager for AptManager {
         args.extend(packages.iter().map(|s| s.as_str()));
         output!("install:");
         let output = self.call_aptget(&args)?;
-        if output.stdout.len() > 0 {
+        if !output.stdout.is_empty() {
             indent_output!(1, "stdout:");
             indent_output!(2, "{}", String::from_utf8_lossy(&output.stdout));
         }
-        if output.stderr.len() > 0 {
+        if !output.stderr.is_empty() {
             indent_output!(1, "stderr:");
             indent_output!(2, "{}", String::from_utf8_lossy(&output.stderr));
         }
         indent_output!(1, "exit code: {}", exit_status(&output.status));
 
         if !output.status.success() {
-            return Err(TaskError::ActionError(format!(
+            return Err(TaskError::Action(format!(
                 "Failed installing packages: {}",
                 String::from_utf8_lossy(&output.stderr)
             )));
@@ -148,18 +148,18 @@ impl PackageManager for AptManager {
         args.extend(packages);
         output!("remove:");
         let output = self.call_aptget(&args)?;
-        if output.stdout.len() > 0 {
+        if !output.stdout.is_empty() {
             indent_output!(1, "stdout:");
             indent_output!(2, "{}", String::from_utf8_lossy(&output.stdout));
         }
-        if output.stderr.len() > 0 {
+        if !output.stderr.is_empty() {
             indent_output!(1, "stderr:");
             indent_output!(2, "{}", String::from_utf8_lossy(&output.stderr));
         }
         indent_output!(1, "exit code: {}", exit_status(&output.status));
 
         if !output.status.success() {
-            return Err(TaskError::ActionError(format!(
+            return Err(TaskError::Action(format!(
                 "Failed installing packages: {}",
                 String::from_utf8_lossy(&output.stderr)
             )));

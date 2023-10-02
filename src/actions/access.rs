@@ -21,13 +21,13 @@ struct UserModDef {
 }
 
 impl UserModDef {
-    fn from_lua<'a>(name: String, opts: Table<'a>) -> Result<UserModDef, LuaError> {
+    fn from_lua(name: String, opts: Table<'_>) -> Result<UserModDef, LuaError> {
         let comment = opts.get::<_, Option<String>>("comment")?;
         let home_dir = opts.get::<_, Option<String>>("home_dir")?;
         let primary_group = opts.get::<_, Option<String>>("group")?;
         let groups = opts
             .get::<_, Option<Vec<String>>>("groups")?
-            .unwrap_or_else(|| Vec::new());
+            .unwrap_or_default();
         let system = opts.get::<_, Option<bool>>("is_system")?.unwrap_or(false);
         let user_group = opts
             .get::<_, Option<bool>>("create_user_group")?
@@ -60,7 +60,7 @@ struct GroupModDef {
 }
 
 impl GroupModDef {
-    fn from_lua<'a>(name: String, opts: Table<'a>) -> Result<GroupModDef, LuaError> {
+    fn from_lua(name: String, opts: Table<'_>) -> Result<GroupModDef, LuaError> {
         let system = opts.get::<_, Option<bool>>("is_system")?.unwrap_or(false);
         let gid = opts.get::<_, Option<u32>>("gid")?;
         Ok(GroupModDef { name, system, gid })
@@ -106,7 +106,7 @@ fn create_user(user: UserModDef) -> Result<(), TaskError> {
     cmd.arg(user.name);
     let output = cmd.output()?;
     if !output.status.success() {
-        return Err(TaskError::ActionError(format!(
+        return Err(TaskError::Action(format!(
             "Bad useradd exit {}: {} {}",
             exit_status(&output.status),
             String::from_utf8_lossy(&output.stdout),
@@ -143,7 +143,7 @@ fn modify_user(user: UserModDef) -> Result<(), TaskError> {
     cmd.arg(user.name);
     let output = cmd.output()?;
     if !output.status.success() {
-        return Err(TaskError::ActionError(format!(
+        return Err(TaskError::Action(format!(
             "Bad usermod exit {}: {} {}",
             exit_status(&output.status),
             String::from_utf8_lossy(&output.stdout),
@@ -169,7 +169,7 @@ fn create_group(group: GroupModDef) -> Result<(), TaskError> {
     cmd.arg(group.name);
     let output = cmd.output()?;
     if !output.status.success() {
-        return Err(TaskError::ActionError(format!(
+        return Err(TaskError::Action(format!(
             "Bad groupadd exit {}: {} {}",
             exit_status(&output.status),
             String::from_utf8_lossy(&output.stdout),
@@ -189,7 +189,7 @@ fn modify_group(group: GroupModDef) -> Result<(), TaskError> {
     cmd.arg(group.name);
     let output = cmd.output()?;
     if !output.status.success() {
-        return Err(TaskError::ActionError(format!(
+        return Err(TaskError::Action(format!(
             "Bad groupadd exit {}: {} {}",
             exit_status(&output.status),
             String::from_utf8_lossy(&output.stdout),

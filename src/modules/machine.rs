@@ -8,7 +8,7 @@ pub fn machine(lua: &Lua) -> Result<(), TaskError> {
     let uname_tbl = lua.create_table()?;
 
     let uname_info =
-        uname().map_err(|e| TaskError::ActionError(format!("Unable to run uname, err: {}", e)))?;
+        uname().map_err(|e| TaskError::Action(format!("Unable to run uname, err: {}", e)))?;
     uname_tbl.set("sysname", uname_info.sysname().to_string_lossy().as_ref())?;
     uname_tbl.set("nodename", uname_info.nodename().to_string_lossy().as_ref())?;
     uname_tbl.set("release", uname_info.release().to_string_lossy().as_ref())?;

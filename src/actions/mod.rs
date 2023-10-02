@@ -56,9 +56,7 @@ pub fn fail(lua: &Lua) -> Result<(), TaskError> {
     let f = lua.create_function::<_, (), _>(|_, msg: String| {
         output!("fail:");
         output!("  {}", &msg);
-        Err(mlua::Error::ExternalError(Arc::new(
-            TaskError::ActionError(msg),
-        )))
+        Err(mlua::Error::ExternalError(Arc::new(TaskError::Action(msg))))
     })?;
     lua.globals().set("fail", f)?;
     Ok(())

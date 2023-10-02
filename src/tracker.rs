@@ -1,7 +1,6 @@
 use std::{
-    borrow::Cow,
     fmt::Arguments,
-    sync::{Arc, Mutex},
+    sync::{Mutex},
     time::{Duration, Instant},
 };
 

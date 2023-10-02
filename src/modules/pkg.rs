@@ -11,7 +11,7 @@ use super::packaging::{
 pub fn pkg(lua: &Lua) -> Result<(), TaskError> {
     let t = lua.create_table()?;
 
-    t.set("apt", apt(&lua)?)?;
+    t.set("apt", apt(lua)?)?;
     lua.globals().set("pkg", t)?;
 
     Ok(())
@@ -48,7 +48,7 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
     let status = ctx.create_function(|ctx, name: String| {
         let apt = AptManager::new();
         let status = apt.package_status(&name).map_err(error::task_error)?;
-        Ok(package_status_to_lua(ctx, &status)?)
+        package_status_to_lua(ctx, &status)
     })?;
     tbl.set("status", status)?;
 
@@ -173,7 +173,7 @@ fn value_to_install_request(val: &mlua::Value) -> Result<InstallRequest, mlua::E
         }),
         mlua::Value::Table(t) => {
             let name = t.get::<_, String>("name")?;
-            let version = t.get::<_, Option<String>>("version")?.map(|v| Version(v));
+            let version = t.get::<_, Option<String>>("version")?.map(Version);
 
             Ok(InstallRequest { name, version })
         }

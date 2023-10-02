@@ -16,9 +16,7 @@ impl Variables {
         if let serde_json::Value::Object(ref o) = self.raw {
             Ok(o.get(key))
         } else {
-            return Err(error::action_error(format!(
-                "Invalid variables type, must be a JSON Object"
-            )));
+            Err(error::action_error("Invalid variables type, must be a JSON Object".to_string()))
         }
     }
 
@@ -32,9 +30,9 @@ impl Variables {
     }
 
     pub fn get<'lua>(&self, ctx: &'lua Lua, key: &str) -> Result<mlua::Value<'lua>, mlua::Error> {
-        let val = if let Some(v) = self.get_from_raw(&key)? {
-            util::json_to_lua_value(&ctx, v)?
-        } else if let Some(v) = self.get_from_registry(&ctx, &key)? {
+        let val = if let Some(v) = self.get_from_raw(key)? {
+            util::json_to_lua_value(ctx, v)?
+        } else if let Some(v) = self.get_from_registry(ctx, key)? {
             v
         } else {
             return Err(error::action_error(format!(
@@ -59,7 +57,7 @@ impl Variables {
 impl UserData for Variables {
     fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
         methods.add_meta_method(MetaMethod::Index, |ctx, this, idx: String| {
-            let v = this.get(&ctx, &idx)?;
+            let v = this.get(ctx, &idx)?;
             Ok(v)
         });
         methods.add_meta_method_mut(

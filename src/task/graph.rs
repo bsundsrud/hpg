@@ -3,8 +3,6 @@ use std::collections::{HashMap, HashSet};
 use petgraph::graph::DiGraph;
 use petgraph::prelude::*;
 
-use crate::error::TaskError;
-
 use super::{Task, TaskHandle, TaskRegistry};
 
 pub type TaskIdx = NodeIndex<u32>;
@@ -12,7 +10,6 @@ pub type TaskGraph = DiGraph<Task, (), u32>;
 
 pub struct GraphState {
     dag: TaskGraph,
-    registry: TaskRegistry,
     id_graph_map: HashMap<TaskHandle, TaskIdx>,
 }
 
@@ -38,10 +35,7 @@ impl GraphState {
                 let dep_idx = id_graph_map
                     .get(&dep.id)
                     .expect("Dep not found in task map");
-                dep_map
-                    .entry(*idx)
-                    .or_insert_with(|| Vec::new())
-                    .push(*dep_idx);
+                dep_map.entry(*idx).or_insert_with(Vec::new).push(*dep_idx);
             }
         }
 
@@ -51,11 +45,7 @@ impl GraphState {
             }
         }
 
-        Self {
-            dag,
-            registry,
-            id_graph_map,
-        }
+        Self { dag, id_graph_map }
     }
 
     // Determine all dependent tasks for the given task
@@ -98,8 +88,7 @@ impl GraphState {
         let mut uniques = HashSet::new();
         let mut execution: Vec<TaskHandle> = tasks
             .iter()
-            .map(|task| self.execution_for_task(*task))
-            .flatten()
+            .flat_map(|task| self.execution_for_task(*task))
             .collect();
 
         execution.retain(|t| uniques.insert(*t));

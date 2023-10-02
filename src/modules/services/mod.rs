@@ -24,7 +24,7 @@ impl UserData for HpgSystemdUnit {
         methods.add_method("start", |_, this, _: ()| {
             output!("Starting service {}...", this.unit.service());
             let res = this.unit.start().map_err(error::task_error)?;
-            output!("Starting service {}: {}", this.unit.service(), res.to_lua());
+            output!("Starting service {}: {}", this.unit.service(), res.as_lua());
             Ok(res)
         });
 
@@ -37,14 +37,14 @@ impl UserData for HpgSystemdUnit {
                     this.unit.service()
                 )));
             }
-            output!("Starting service {}: {}", this.unit.service(), res.to_lua());
+            output!("Starting service {}: {}", this.unit.service(), res.as_lua());
             Ok(())
         });
 
         methods.add_method("stop", |_, this, _: ()| {
             output!("Stopping service {}...", this.unit.service());
             let res = this.unit.stop().map_err(error::task_error)?;
-            output!("Stopping service {}: {}", this.unit.service(), res.to_lua());
+            output!("Stopping service {}: {}", this.unit.service(), res.as_lua());
             Ok(res)
         });
 
@@ -57,7 +57,7 @@ impl UserData for HpgSystemdUnit {
                     this.unit.service()
                 )));
             }
-            output!("Stopping service {}: {}", this.unit.service(), res.to_lua());
+            output!("Stopping service {}: {}", this.unit.service(), res.as_lua());
             Ok(())
         });
 
@@ -67,7 +67,7 @@ impl UserData for HpgSystemdUnit {
             output!(
                 "Reloading service {}: {}",
                 this.unit.service(),
-                res.to_lua()
+                res.as_lua()
             );
             Ok(res)
         });
@@ -84,7 +84,7 @@ impl UserData for HpgSystemdUnit {
             output!(
                 "Reloading service {}: {}",
                 this.unit.service(),
-                res.to_lua()
+                res.as_lua()
             );
             Ok(())
         });
@@ -95,7 +95,7 @@ impl UserData for HpgSystemdUnit {
             output!(
                 "Restarting service {}: {}",
                 this.unit.service(),
-                res.to_lua()
+                res.as_lua()
             );
             Ok(res)
         });
@@ -112,7 +112,7 @@ impl UserData for HpgSystemdUnit {
             output!(
                 "Restarting service {}: {}",
                 this.unit.service(),
-                res.to_lua()
+                res.as_lua()
             );
             Ok(())
         });
@@ -123,7 +123,7 @@ impl UserData for HpgSystemdUnit {
             output!(
                 "Reload/restart service {}: {}",
                 this.unit.service(),
-                res.to_lua()
+                res.as_lua()
             );
             Ok(res)
         });
@@ -140,7 +140,7 @@ impl UserData for HpgSystemdUnit {
             output!(
                 "Reload/restart service {}: {}",
                 this.unit.service(),
-                res.to_lua()
+                res.as_lua()
             );
             Ok(())
         });

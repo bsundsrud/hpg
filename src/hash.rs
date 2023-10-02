@@ -2,7 +2,7 @@ use sha2::{Digest, Sha256};
 use std::{fs::File, io::Error as IoError, path::Path};
 
 pub fn file_hash(path: &Path) -> Result<String, IoError> {
-    let mut f = File::open(&path)?;
+    let mut f = File::open(path)?;
 
     let mut hasher = Sha256::new();
     std::io::copy(&mut f, &mut hasher)?;

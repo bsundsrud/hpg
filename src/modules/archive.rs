@@ -77,8 +77,8 @@ impl HpgArchive {
 
     pub fn extract(&self, dst: &Path) -> Result<HpgDir, mlua::Error> {
         match self.ty {
-            ArchiveType::Zip => extract_zip(&self.path, &dst)?,
-            ArchiveType::Tarball(ty) => extract_tarball(&self.path, &dst, &ty)?,
+            ArchiveType::Zip => extract_zip(&self.path, dst)?,
+            ArchiveType::Tarball(ty) => extract_tarball(&self.path, dst, &ty)?,
         }
         Ok(HpgDir::new(dst))
     }
@@ -101,7 +101,7 @@ impl HpgArchive {
 impl UserData for HpgArchive {
     fn add_methods<'lua, T: mlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
         methods.add_method("extract", |_ctx, this, dst: String| {
-            let dst = Path::new(".").join(&dst);
+            let dst = Path::new(".").join(dst);
             output!(
                 "Extract {} to {}",
                 &this.path.to_string_lossy(),
@@ -113,11 +113,11 @@ impl UserData for HpgArchive {
 }
 
 fn extract_zip(src: &Path, dst: &Path) -> Result<(), mlua::Error> {
-    let f = File::open(&src).map_err(error::io_error)?;
+    let f = File::open(src).map_err(error::io_error)?;
     let mut archive =
         ZipArchive::new(&f).map_err(|e| error::action_error(format!("Zip Error: {}", e)))?;
     archive
-        .extract(&dst)
+        .extract(dst)
         .map_err(|e| error::action_error(format!("Zip Error: {}", e)))?;
     Ok(())
 }
@@ -127,17 +127,17 @@ fn extract_tarball(
     dst: &Path,
     ty: &Option<CompressionType>,
 ) -> Result<(), mlua::Error> {
-    let f = File::open(&src).map_err(error::io_error)?;
+    let f = File::open(src).map_err(error::io_error)?;
     match *ty {
         Some(CompressionType::Gzip) => {
             let tar = GzDecoder::new(f);
             let mut archive = Archive::new(tar);
-            archive.unpack(&dst).map_err(error::io_error)?;
+            archive.unpack(dst).map_err(error::io_error)?;
         }
         Some(CompressionType::Bzip2) => unimplemented!(),
         None => {
             let mut archive = Archive::new(f);
-            archive.unpack(&dst).map_err(error::io_error)?;
+            archive.unpack(dst).map_err(error::io_error)?;
         }
     }
 
@@ -152,9 +152,9 @@ pub fn archive(lua: &Lua) -> Result<(), TaskError> {
             ctx.create_table()?
         };
         let ty = opts.get::<_, Option<String>>("type")?;
-        let ty_ref = ty.as_ref().map(|s| s.as_str());
+        let ty_ref = ty.as_deref();
         let compression = opts.get::<_, Option<String>>("compression")?;
-        let comp_ref = compression.as_ref().map(|s| s.as_str());
+        let comp_ref = compression.as_deref();
         let src = Path::new(".").join(&path);
         let archive_ty = match (ty_ref, comp_ref) {
             (Some("zip"), _) => ArchiveType::zip(),

@@ -70,7 +70,7 @@ impl UserData for HpgFile {
         methods.add_method("copy", |_, this, dst: String| {
             let src_contents = util::read_file(&this.path).map_err(error::io_error)?;
             let cwd = Path::new(".");
-            let dst = cwd.join(&dst);
+            let dst = cwd.join(dst);
 
             output!(
                 "copy {} to {}",
@@ -78,8 +78,7 @@ impl UserData for HpgFile {
                 &dst.to_string_lossy()
             );
 
-            let updated: bool;
-            if should_update_file(&dst, &src_contents).map_err(error::io_error)? {
+            let updated = if should_update_file(&dst, &src_contents).map_err(error::io_error)? {
                 let mut outfile = OpenOptions::new()
                     .write(true)
                     .create(true)
@@ -89,18 +88,18 @@ impl UserData for HpgFile {
                 outfile
                     .write_all(src_contents.as_bytes())
                     .map_err(error::io_error)?;
-                updated = true;
+                true
             } else {
                 indent_output!(1, "files matched, skipped");
-                updated = false;
-            }
+                false
+            };
             Ok(updated)
         });
         methods.add_method(
             "template",
             |ctx, this, (dst, template_context): (String, Option<Table>)| {
                 let cwd = Path::new(".");
-                let dst = cwd.join(&dst);
+                let dst = cwd.join(dst);
                 output!(
                     "render template {} to {}",
                     &this.path.to_string_lossy(),
@@ -114,10 +113,10 @@ impl UserData for HpgFile {
                 let template_context = util::lua_table_to_json(template_context)
                     .map_err(|e| error::action_error(format!("Unable to parse context: {}", e)))?;
 
-                let src_contents = run_template_file(&this.path, template_context)
-                    .map_err(|e| error::task_error(e))?;
-                let updated: bool;
-                if should_update_file(&dst, &src_contents).map_err(error::io_error)? {
+                let src_contents =
+                    run_template_file(&this.path, template_context).map_err(error::task_error)?;
+
+                let updated = if should_update_file(&dst, &src_contents).map_err(error::io_error)? {
                     let mut outfile = OpenOptions::new()
                         .write(true)
                         .create(true)
@@ -127,17 +126,17 @@ impl UserData for HpgFile {
                     outfile
                         .write_all(src_contents.as_bytes())
                         .map_err(error::io_error)?;
-                    updated = true;
+                    true
                 } else {
                     indent_output!(1, "files matched, skipped");
-                    updated = false;
-                }
+                    false
+                };
                 Ok(updated)
             },
         );
         methods.add_method("symlink", |_, this, dst: String| {
             let cwd = Path::new(".");
-            let dst = cwd.join(&dst);
+            let dst = cwd.join(dst);
             output!(
                 "Symlink {} to {}",
                 &this.path.to_string_lossy(),
@@ -279,7 +278,7 @@ impl UserData for HpgDir {
 
         methods.add_method("symlink", |_, this, dst: String| {
             let cwd = Path::new(".");
-            let dst = cwd.join(&dst);
+            let dst = cwd.join(dst);
             output!(
                 "Symlink {} to {}",
                 &this.path.to_string_lossy(),
@@ -308,7 +307,7 @@ impl UserData for HpgDir {
 pub fn file(lua: &Lua) -> Result<(), TaskError> {
     let f = lua.create_function(|_, path: String| {
         let cwd = Path::new(".");
-        let p = cwd.join(&path);
+        let p = cwd.join(path);
         if p.exists() && !p.is_file() {
             return Err(error::action_error(format!(
                 "Path {} already exists and is not a file",
@@ -324,7 +323,7 @@ pub fn file(lua: &Lua) -> Result<(), TaskError> {
 pub fn dir(lua: &Lua) -> Result<(), TaskError> {
     let f = lua.create_function(|_, path: String| {
         let cwd = Path::new(".");
-        let p = cwd.join(&path);
+        let p = cwd.join(path);
         if p.exists() && p.is_file() {
             return Err(error::action_error(format!(
                 "Path {} already exists and is a file",
@@ -376,15 +375,15 @@ fn append_to_existing(
             .create(true)
             .write(true)
             .truncate(true)
-            .open(&dst)
+            .open(dst)
             .map_err(error::io_error)?;
         outfile
             .write_all(contents.as_bytes())
             .map_err(error::io_error)?;
         updated = true;
     } else {
-        let mut target_contents = util::read_file(&dst).map_err(error::io_error)?;
-        if target_contents.contains(&marker) {
+        let mut target_contents = util::read_file(dst).map_err(error::io_error)?;
+        if target_contents.contains(marker) {
             // we've already got a section, check if it needs updates
             let mut found_start = false;
             let mut found_end = false;
@@ -397,8 +396,8 @@ fn append_to_existing(
             output_lines.push(marker_line.clone());
 
             for line in target_contents.lines() {
-                if line.contains(&marker) && !found_start {
-                    let old_hash = line.trim_start_matches(&marker).trim();
+                if line.contains(marker) && !found_start {
+                    let old_hash = line.trim_start_matches(marker).trim();
                     found_start = true;
                     if old_hash == hash {
                         // break early, sections match so don't touch the file
@@ -408,7 +407,7 @@ fn append_to_existing(
                         // sections don't match, append new section and start ignoring old section
                         new_lines.extend_from_slice(&output_lines);
                     }
-                } else if line.contains(&marker) && found_start {
+                } else if line.contains(marker) && found_start {
                     found_end = true;
                 } else if found_start && !found_end {
                     // Ignore these lines, we're between the start and end and we don't match
@@ -420,7 +419,7 @@ fn append_to_existing(
                 let mut outfile = OpenOptions::new()
                     .write(true)
                     .truncate(true)
-                    .open(&dst)
+                    .open(dst)
                     .map_err(error::io_error)?;
                 outfile
                     .write_all(new_lines.join("\n").as_bytes())
@@ -439,7 +438,7 @@ fn append_to_existing(
             let mut outfile = OpenOptions::new()
                 .write(true)
                 .truncate(true)
-                .open(&dst)
+                .open(dst)
                 .map_err(error::io_error)?;
             outfile
                 .write_all(target_contents.as_bytes())
@@ -454,23 +453,21 @@ fn should_update_file(dst: &Path, contents: &str) -> Result<bool, std::io::Error
     if !dst.exists() || !dst.is_file() {
         Ok(true)
     } else {
-        Ok(hash::file_hash(&dst)? != hash::content_hash(&contents))
+        Ok(hash::file_hash(dst)? != hash::content_hash(contents))
     }
 }
 
 fn run_template_file(tmpl_path: &Path, context: serde_json::Value) -> Result<String, TaskError> {
     let ctx = tera::Context::from_value(context)
-        .map_err(|e| TaskError::ActionError(format!("Invalid context: {}", e)))?;
+        .map_err(|e| TaskError::Action(format!("Invalid context: {}", e)))?;
     let tmpl_contents = util::read_file(tmpl_path)?;
-    let rendered = tera::Tera::one_off(&tmpl_contents, &ctx, false)
-        .map_err(|e| TaskError::TemplateError(e))?;
+    let rendered = tera::Tera::one_off(&tmpl_contents, &ctx, false).map_err(TaskError::Template)?;
     Ok(rendered)
 }
 
 fn run_template(tmpl: &str, context: serde_json::Value) -> Result<String, TaskError> {
     let ctx = tera::Context::from_value(context)
-        .map_err(|e| TaskError::ActionError(format!("Invalid context: {}", e)))?;
-    let rendered =
-        tera::Tera::one_off(&tmpl, &ctx, false).map_err(|e| TaskError::TemplateError(e))?;
+        .map_err(|e| TaskError::Action(format!("Invalid context: {}", e)))?;
+    let rendered = tera::Tera::one_off(tmpl, &ctx, false).map_err(TaskError::Template)?;
     Ok(rendered)
 }

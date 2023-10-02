@@ -17,6 +17,7 @@ struct ProcessOutput {
     stderr: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn exec_streaming_process(
     cmd: String,
     args: Vec<String>,
@@ -27,7 +28,7 @@ fn exec_streaming_process(
     capture_stderr: bool,
     echo: bool,
 ) -> Result<ProcessOutput, mlua::Error> {
-    let mut p = tokio::process::Command::new(&cmd);
+    let mut p = tokio::process::Command::new(cmd);
     p.args(args);
     if let Some(cwd) = cwd {
         p.current_dir(cwd);
@@ -36,7 +37,7 @@ fn exec_streaming_process(
     if !inherit_env {
         p.env_clear();
     }
-    p.envs(env.into_iter());
+    p.envs(env);
 
     p.stdout(Stdio::piped());
     p.stderr(Stdio::piped());
@@ -100,6 +101,7 @@ fn exec_streaming_process(
     Ok(output)
 }
 
+#[allow(dead_code)]
 fn exec_blocking_process(
     cmd: String,
     args: Vec<String>,
@@ -109,7 +111,7 @@ fn exec_blocking_process(
     capture_stdout: bool,
     capture_stderr: bool,
 ) -> Result<ProcessOutput, mlua::Error> {
-    let mut p = std::process::Command::new(&cmd);
+    let mut p = std::process::Command::new(cmd);
     p.args(args);
     if let Some(cwd) = cwd {
         p.current_dir(cwd);
@@ -118,7 +120,7 @@ fn exec_blocking_process(
     if !inherit_env {
         p.env_clear();
     }
-    p.envs(env.into_iter());
+    p.envs(env);
     if capture_stdout {
         p.stdout(Stdio::piped());
     } else {
@@ -154,7 +156,7 @@ pub fn shell(lua: &Lua) -> Result<(), TaskError> {
         let inherit_env = opts.get::<_, Option<bool>>("inherit_env")?.unwrap_or(true);
         let env = opts
             .get::<_, Option<HashMap<String, String>>>("env")?
-            .unwrap_or_else(HashMap::new);
+            .unwrap_or_default();
         let cwd: Option<String> = opts.get("cwd")?;
         let stdout = opts.get::<_, Option<bool>>("stdout")?.unwrap_or(true);
         let stderr = opts.get::<_, Option<bool>>("stderr")?.unwrap_or(true);
@@ -165,7 +167,7 @@ pub fn shell(lua: &Lua) -> Result<(), TaskError> {
             .unwrap_or_else(|| String::from("/bin/sh"));
         let mut sh_args = opts
             .get::<_, Option<Vec<String>>>("sh_args")?
-            .unwrap_or_else(Vec::new);
+            .unwrap_or_default();
 
         let mut temp_file = NamedTempFile::new().map_err(io_error)?;
         temp_file.write_all(cmd.as_bytes()).map_err(io_error)?;
@@ -202,7 +204,7 @@ pub fn exec(lua: &Lua) -> Result<(), TaskError> {
         };
         let args = opts
             .get::<_, Option<Vec<String>>>("args")?
-            .unwrap_or_else(Vec::new);
+            .unwrap_or_default();
         if args.is_empty() {
             output!("exec [ {} ]:", &cmd);
         } else {
@@ -212,7 +214,7 @@ pub fn exec(lua: &Lua) -> Result<(), TaskError> {
         let inherit_env = opts.get::<_, Option<bool>>("inherit_env")?.unwrap_or(true);
         let env = opts
             .get::<_, Option<HashMap<String, String>>>("env")?
-            .unwrap_or_else(HashMap::new);
+            .unwrap_or_default();
         let cwd: Option<String> = opts.get("cwd")?;
         let stdout = opts.get::<_, Option<bool>>("stdout")?.unwrap_or(true);
         let stderr = opts.get::<_, Option<bool>>("stderr")?.unwrap_or(true);

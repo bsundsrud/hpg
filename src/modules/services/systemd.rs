@@ -113,7 +113,7 @@ pub enum JobResult {
 }
 
 impl JobResult {
-    pub fn to_lua(&self) -> &'static str {
+    pub fn as_lua(&self) -> &'static str {
         match self {
             JobResult::Done => "done",
             JobResult::Canceled => "canceled",
@@ -131,7 +131,7 @@ impl UserData for JobResult {
 
         methods.add_method("successful", |_, &this, _: ()| Ok(this == JobResult::Done));
 
-        methods.add_method("result", |_, &this, _: ()| Ok(this.to_lua()));
+        methods.add_method("result", |_, &this, _: ()| Ok(this.as_lua()));
     }
 }
 
@@ -146,7 +146,7 @@ impl FromStr for JobResult {
             "failed" => Ok(Failed),
             "dependency" => Ok(Dependency),
             "skipped" => Ok(Skipped),
-            t @ _ => Err(TaskError::ActionError(format!("Invalid job result {}", t))),
+            t => Err(TaskError::Action(format!("Invalid job result {}", t))),
         }
     }
 }
@@ -189,7 +189,7 @@ impl SystemdUnit {
             for signal in self.manager()?.receive_job_removed()? {
                 let args = signal.args()?;
                 if args.job() == job {
-                    return Ok(JobResult::from_str(args.result())?);
+                    return JobResult::from_str(args.result());
                 }
             }
         }
@@ -201,28 +201,28 @@ impl SystemdUnit {
 
     pub fn reload(&self) -> Result<JobResult> {
         let job = self.manager()?.reload_unit(&self.unit, "replace")?;
-        Ok(self.wait_for_job(&job)?)
+        self.wait_for_job(&job)
     }
 
     pub fn restart(&self) -> Result<JobResult> {
         let job = self.manager()?.restart_unit(&self.unit, "replace")?;
-        Ok(self.wait_for_job(&job)?)
+        self.wait_for_job(&job)
     }
 
     pub fn reload_or_restart(&self) -> Result<JobResult> {
         let job = self
             .manager()?
             .reload_or_restart_unit(&self.unit, "replace")?;
-        Ok(self.wait_for_job(&job)?)
+        self.wait_for_job(&job)
     }
     pub fn start(&self) -> Result<JobResult> {
         let job = self.manager()?.start_unit(&self.unit, "replace")?;
-        Ok(self.wait_for_job(&job)?)
+        self.wait_for_job(&job)
     }
 
     pub fn stop(&self) -> Result<JobResult> {
         let job = self.manager()?.stop_unit(&self.unit, "replace")?;
-        Ok(self.wait_for_job(&job)?)
+        self.wait_for_job(&job)
     }
 
     pub fn enable(&self, force: bool) -> Result<UnitChange> {

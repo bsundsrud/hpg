@@ -1,5 +1,5 @@
 use crate::error::{self, TaskError};
-use crate::{indent_output, output};
+use crate::{indent_output};
 
 use mlua::{IntoLua, Lua, Table};
 use nix::unistd::{Gid, Group, Uid, User};
@@ -33,9 +33,9 @@ pub(crate) fn gid_for_value(val: &mlua::Value) -> Result<Gid, mlua::Error> {
             Ok(group.gid)
         }
         _ => {
-            return Err(error::action_error(
+            Err(error::action_error(
                 "invalid group type, must be string or integer",
-            ));
+            ))
         }
     }
 }
@@ -57,9 +57,9 @@ pub(crate) fn uid_for_value(val: &mlua::Value) -> Result<Uid, mlua::Error> {
             Ok(user.uid)
         }
         _ => {
-            return Err(error::action_error(
+            Err(error::action_error(
                 "invalid group type, must be string or integer",
-            ));
+            ))
         }
     }
 }
@@ -95,7 +95,7 @@ pub(crate) fn run_chown(
     Ok(())
 }
 
-pub(crate) fn lua_table_to_json<'lua>(tbl: Table<'lua>) -> Result<Value, TaskError> {
+pub(crate) fn lua_table_to_json(tbl: Table<'_>) -> Result<Value, TaskError> {
     use mlua::Value as LuaValue;
     use serde_json::Value as JsonValue;
 

@@ -54,7 +54,7 @@ impl HpgInstaller {
             .create(true)
             .truncate(true)
             .write(true)
-            .open(&archive_path)
+            .open(archive_path)
             .map_err(error::io_error)?;
 
         res.copy_to(&mut f)
@@ -71,7 +71,7 @@ impl HpgInstaller {
                 .create(true)
                 .truncate(true)
                 .write(true)
-                .open(&hash_file)
+                .open(hash_file)
                 .map_err(error::io_error)?;
             f.write_all(h.as_bytes()).map_err(error::io_error)?;
         }
@@ -79,7 +79,7 @@ impl HpgInstaller {
     }
 
     fn install_dir(&self) -> &Path {
-        &self.install_dir.as_ref().unwrap_or(&self.extract_dir)
+        self.install_dir.as_ref().unwrap_or(&self.extract_dir)
     }
 
     fn hash_matches(&self) -> bool {
@@ -104,13 +104,13 @@ impl HpgInstaller {
             InstallSource::File(f) => f,
         };
         if let Some(desired) = &self.hash {
-            if let Ok(h) = crate::hash::file_hash(&archive_path) {
-                return desired == &h;
+            if let Ok(h) = crate::hash::file_hash(archive_path) {
+                desired == &h
             } else {
-                return false;
+                false
             }
         } else {
-            return false;
+            false
         }
     }
 
@@ -120,7 +120,7 @@ impl HpgInstaller {
                 let dir = archive_path.parent().ok_or_else(|| {
                     error::action_error(format!("Invalid archive_path {}", &archive_path.display()))
                 })?;
-                std::fs::create_dir_all(&dir).map_err(error::io_error)?;
+                std::fs::create_dir_all(dir).map_err(error::io_error)?;
                 output!("Installing {}", archive_path.display());
                 if self.hash_matches() {
                     indent_output!(1, "Hashes matched, skipped install");
@@ -144,7 +144,7 @@ impl HpgInstaller {
                     return Ok(HpgDir::new(&self.extract_dir));
                 }
                 if let Some(ty) = HpgArchive::guess_archive_type(&f.to_string_lossy()) {
-                    HpgArchive::new(&f, ty)
+                    HpgArchive::new(f, ty)
                 } else {
                     return Err(error::action_error(format!(
                         "Couldn't guess archive type of file {}",

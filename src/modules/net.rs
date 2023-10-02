@@ -23,10 +23,10 @@ impl HpgUrl {
         Ok(HpgUrl { url: u.into_url()? })
     }
 
-    pub fn opts_to_request<'lua>(
+    pub fn opts_to_request(
         &self,
         client: &Client,
-        opts: &Table<'lua>,
+        opts: &Table<'_>,
     ) -> Result<RequestBuilder, mlua::Error> {
         let mut builder = client.get(self.url.clone());
         if let Some(headers) = opts.get::<_, Option<Table>>("headers")? {
@@ -38,7 +38,7 @@ impl HpgUrl {
         Ok(builder)
     }
 
-    pub fn validate_response<'lua>(resp: &Response, opts: &Table<'lua>) -> Result<(), mlua::Error> {
+    pub fn validate_response(resp: &Response, opts: &Table<'_>) -> Result<(), mlua::Error> {
         let expected_response = opts
             .get::<_, Option<u16>>("expected_response")?
             .unwrap_or(200);
@@ -75,9 +75,9 @@ impl UserData for HpgUrl {
 
             HpgUrl::validate_response(&res, &opts)?;
 
-            Ok(res
+            res
                 .text()
-                .map_err(|e| error::action_error(format!("Body error: {}", e)))?)
+                .map_err(|e| error::action_error(format!("Body error: {}", e)))
         });
 
         methods.add_method("json", |ctx, this, opts: Option<Table>| {
@@ -99,7 +99,7 @@ impl UserData for HpgUrl {
                 .json()
                 .map_err(|e| error::action_error(format!("Body error: {}", e)))?;
 
-            Ok(util::json_to_lua_value(ctx, &j)?)
+            util::json_to_lua_value(ctx, &j)
         });
 
         methods.add_method("save", |ctx, this, (dst, opts): (String, Option<Table>)| {
@@ -133,7 +133,7 @@ impl UserData for HpgUrl {
 
 pub fn url(lua: &Lua) -> Result<(), TaskError> {
     let f = lua.create_function(|_, u: String| {
-        let u = HpgUrl::new(&u).map_err(|e| error::action_error(format!("Invalid Url: {}", e)))?;
+        let u = HpgUrl::new(u).map_err(|e| error::action_error(format!("Invalid Url: {}", e)))?;
         Ok(u)
     })?;
     lua.globals().set("url", f)?;
