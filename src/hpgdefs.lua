@@ -1,15 +1,20 @@
 ---@diagnostic disable: lowercase-global, missing-return
+
+--- Task sigil type
+---@class Task
+
 --- Defines an HPG task. Task bodies are not evaluated until after
 --- task dependencies and execution order has been defined.
----@param description Human description of the task
----@param dependency? string|string[] Other task names that must run before this one.
+---@param description string Human description of the task
+---@param dependency? Task|Task[] Other task names that must run before this one.
 ---@param body function? Task body, code to run on task execution.
+---@return Task Task object that can be used for dependencies
 ---@overload fun(description: string, body: function)
-function task(dependency, body)
+function task(description, dependency, body)
 end
 
 --- Define tasks that should be run as default (via `hpg -D`).
----@param task string Task name to register as a default.
+---@param task string|Task Task name to register as a default.
 ---@vararg string
 function target(task, ...)
 end
@@ -104,8 +109,8 @@ end
 local File = {}
 
 ---@class FileAppendOpts
----@field src string Source file to read from. Exclusive with `contents`.
----@field contents string Text to append. Exclusive with `src`.
+---@field src string? Source file to read from. Exclusive with `contents`.
+---@field contents string? Text to append. Exclusive with `src`.
 ---@field marker string Text to insert as a region marker. Should be a comment line, according to file type.
 
 --- Append to an existing file, without overwriting unrelated sections.

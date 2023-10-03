@@ -1,6 +1,9 @@
 use std::{
     fmt::Arguments,
-    sync::{Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
     time::{Duration, Instant},
 };
 
@@ -9,6 +12,7 @@ use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressStyle};
 use lazy_static::lazy_static;
 
 pub struct PrettyTracker {
+    debug: AtomicBool,
     console: Term,
     bars: MultiProgress,
     run_bar: Mutex<Option<ProgressBar>>,
@@ -21,11 +25,26 @@ impl PrettyTracker {
         let bars = MultiProgress::new();
         bars.set_alignment(indicatif::MultiProgressAlignment::Top);
         Self {
+            debug: AtomicBool::new(false),
             console: Term::stdout(),
             bars,
             run_bar: Mutex::new(None),
             current_task: Mutex::new(None),
             started: Mutex::new(None),
+        }
+    }
+
+    pub fn set_debug(&self, debug: bool) {
+        self.debug.store(debug, Ordering::SeqCst)
+    }
+
+    pub fn debug_println(&self, args: Arguments) {
+        if self.debug.load(Ordering::SeqCst) {
+            self.bars.suspend(|| {
+                self.console
+                    .write_line(&style(args.to_string()).yellow().dim().to_string())
+                    .unwrap();
+            });
         }
     }
 

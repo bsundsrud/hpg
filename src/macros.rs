@@ -11,3 +11,10 @@ macro_rules! indent_output {
         $crate::tracker::TRACKER.indent_println($level, format_args!($($arg)+));
     });
 }
+
+#[macro_export]
+macro_rules! debug_output {
+    ($($arg:tt)+) => ({
+        $crate::tracker::TRACKER.debug_println(format_args!($($arg)+));
+    });
+}

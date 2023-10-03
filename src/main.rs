@@ -1,5 +1,6 @@
 use console::style;
 use error::HpgError;
+use tracker::TRACKER;
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -82,6 +83,8 @@ struct Opt {
     show: bool,
     #[structopt(short, long, help = "Show available targets")]
     list: bool,
+    #[structopt(long, help = "Show debug output")]
+    debug: bool,
     #[structopt(name = "TARGETS", help = "Task names to run")]
     targets: Vec<String>,
 }
@@ -107,6 +110,7 @@ fn run_hpg() -> Result<()> {
         println!("{}", lsp_defs());
         return Ok(());
     }
+    TRACKER.set_debug(opt.debug);
     let code = load_file(&opt.config)?;
     let lua = LuaState::new()?;
     lua.register_fn(actions::echo)?;

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::{indent_output, output, tracker::TRACKER, Result};
+use crate::{debug_output, indent_output, output, tracker::TRACKER, Result};
 use anyhow::anyhow;
 use console::style;
 use mlua::{self, FromLua, Function, Lua, LuaOptions, Table, UserData, Value, Variadic};
@@ -92,6 +92,22 @@ fn std_lib() -> mlua::StdLib {
     StdLib::TABLE | StdLib::STRING | StdLib::UTF8 | StdLib::MATH | StdLib::PACKAGE
 }
 
+fn find_tasks(table: Table<'_>, registry: &TaskRegistry) -> Result<(), mlua::Error> {
+    for pair in table.pairs() {
+        let (name, val): (String, Value) = pair?;
+        match val {
+            Value::UserData(ud) => {
+                if ud.is::<Task>() {
+                    let ts: &Task = &*ud.borrow::<Task>()?;
+                    registry.register_name(ts.id, name);
+                }
+            }
+            _ => continue,
+        }
+    }
+    Ok(())
+}
+
 pub struct LuaState {
     lua: Lua,
     registry: TaskRegistry,
@@ -142,7 +158,7 @@ impl LuaState {
                                 }
                                 _ => {
                                     return Err(mlua::Error::external(anyhow!(
-                                        "Invalid signature for task() function"
+                                        "Invalid signature for task() function, in dep table"
                                     )));
                                 }
                             }
@@ -165,7 +181,7 @@ impl LuaState {
                     }
                     _ => {
                         return Err(mlua::Error::external(anyhow!(
-                            "Invalid signature for task() function"
+                            "Invalid signature for task() function, second param not table, task, or function: {:?}", deps_or_f 
                         )))
                     }
                 };
@@ -174,7 +190,7 @@ impl LuaState {
                     if task_fn.is_some() {
                         // This means the second argument was also a function, this is invalid.
                         return Err(mlua::Error::external(anyhow!(
-                            "Invalid signature for task() function"
+                            "Invalid signature for task() function, two functions"
                         )));
                     }
                     task_fn = Some(f);
@@ -188,8 +204,8 @@ impl LuaState {
                 ctx.set_named_registry_value("tasks", task_table)?;
 
                 let task = Task::new(i, desc, task_deps);
+                debug_output!("Registered task '{}'", task.description());
                 registry.register_task(task.clone());
-
                 Ok(task)
             },
         )?;
@@ -201,19 +217,47 @@ impl LuaState {
     fn define_target_function(&self) -> Result<(), TaskError> {
         let targets: Vec<String> = Vec::new();
         self.lua.set_named_registry_value("targets", targets)?;
-        let target_fn = self.lua.create_function(|ctx, tasks: Variadic<Task>| {
-            let mut targets: Vec<Task> = ctx.named_registry_value("targets")?;
-
-            let tasks: Vec<Task> = tasks.into_iter().collect();
-
-            for task in tasks {
-                if !targets.contains(&task) {
-                    targets.push(task);
+        let registry = self.registry.clone();
+        let target_fn = self
+            .lua
+            .create_function(move |ctx, tasks: Variadic<Value>| {
+                // At call time, make sure to gather all named tasks to have up-to-date availability
+                find_tasks(ctx.globals(), &registry)?;
+                let mut targets: Vec<Task> = ctx.named_registry_value("targets")?;
+                for t in tasks.iter() {
+                    match t {
+                        Value::String(s) => {
+                            if let Some(t) = registry.task_for_name(s.to_str().unwrap()) {
+                                if !targets.contains(&t) {
+                                    targets.push(t);
+                                }
+                            } else {
+                                return Err(mlua::Error::runtime(format!(
+                                    "Unknown task '{}'",
+                                    s.to_string_lossy()
+                                )));
+                            }
+                        }
+                        Value::UserData(ud) => {
+                            if ud.is::<Task>() {
+                                let task: &Task = &ud.borrow().unwrap();
+                                if !targets.contains(task) {
+                                    targets.push(task.clone());
+                                }
+                            } else {
+                                return Err(mlua::Error::runtime(
+                                    "Invalid argument type to target()",
+                                ));
+                            }
+                        }
+                        _ => {
+                            return Err(mlua::Error::runtime("Invalid argument type to target()"));
+                        }
+                    }
                 }
-            }
-            ctx.set_named_registry_value("targets", targets)?;
-            Ok(())
-        })?;
+                ctx.set_named_registry_value("targets", targets)?;
+                Ok(())
+            })?;
         self.lua.globals().set("target", target_fn)?;
 
         Ok(())
@@ -221,18 +265,7 @@ impl LuaState {
 
     fn find_tasks(&self) -> Result<(), TaskError> {
         let globals = self.lua.globals();
-        for pair in globals.pairs() {
-            let (name, val): (String, Value) = pair?;
-            match val {
-                Value::UserData(ud) => {
-                    if ud.is::<Task>() {
-                        let ts: &Task = &*ud.borrow::<Task>()?;
-                        self.registry.register_name(ts.id, name);
-                    }
-                }
-                _ => continue,
-            }
-        }
+        find_tasks(globals, &self.registry)?;
         Ok(())
     }
 

@@ -3,6 +3,8 @@ use std::{
     sync::{atomic::AtomicUsize, Arc, RwLock},
 };
 
+use crate::debug_output;
+
 use super::{Task, TaskHandle};
 
 #[derive(Debug, Clone)]
@@ -28,7 +30,11 @@ impl TaskRegistry {
 
     pub fn register_name<S: Into<String>>(&self, id: TaskHandle, name: S) {
         let mut named = self.named.write().unwrap();
-        named.insert(name.into(), id);
+        let name = name.into();
+        named.entry(name.clone()).or_insert_with(|| {
+            debug_output!("Registered name {}", name);
+            id
+        });
     }
 
     pub fn task_for_handle(&self, id: TaskHandle) -> Task {
