@@ -29,6 +29,16 @@ impl HpgFile {
 }
 
 impl UserData for HpgFile {
+    fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
+        fields.add_field_method_get("path", |_, this| {
+            Ok(this.path.to_string_lossy().to_string())
+        });
+
+        fields.add_field_method_get("canonical_path", |_, this| {
+            Ok(this.path.canonicalize()?.to_string_lossy().to_string())
+        });
+    }
+
     fn add_methods<'lua, T: mlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
         methods.add_meta_method(MetaMethod::ToString, |_, this, _: ()| {
             Ok(this.path.to_string_lossy().to_string())
@@ -243,6 +253,16 @@ impl HpgDir {
 }
 
 impl UserData for HpgDir {
+    fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
+        fields.add_field_method_get("path", |_, this| {
+            Ok(this.path.to_string_lossy().to_string())
+        });
+
+        fields.add_field_method_get("canonical_path", |_, this| {
+            Ok(this.path.canonicalize()?.to_string_lossy().to_string())
+        });
+    }
+
     fn add_methods<'lua, T: mlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
         methods.add_method("exists", |_, this, _: ()| {
             let exists = this.path.exists();

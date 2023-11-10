@@ -62,6 +62,8 @@ end
 
 --- Represents a filesystem directory.
 ---@class Dir
+---@field path string Directory path, as constructed
+---@field canonical_path string Canonical (fully resolved) directory path. Path must exist.
 local Dir = {}
 
 --- Change directory modes.
@@ -106,6 +108,8 @@ end
 
 --- Represents a file on the filesystem.
 ---@class File
+---@field path string File path, as constructed
+---@field canonical_path string Canonical (fully resolved) file path. Path must exist.
 local File = {}
 
 ---@class FileAppendOpts
