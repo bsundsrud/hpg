@@ -22,6 +22,12 @@ pub enum HpgRemoteError {
     SerilizationError(#[from] ciborium::ser::Error<std::io::Error>),
     #[error("Error deserializing client/server communications: {0}")]
     DeserilizationError(#[from] ciborium::de::Error<std::io::Error>),
+    #[error("Error deserializing config: {0}")]
+    HJsonError(#[from] deser_hjson::Error),
+    #[error("Error deserializing config: {0}")]
+    YamlError(#[from] serde_yaml::Error),
+    #[error("Unknown inventory format: {0}")]
+    ConfigError(String),
     #[error("Rsync calculation error: {0}")]
     RsyncError(#[from] librsync::Error),
     #[error("Unknown Error: {0}")]

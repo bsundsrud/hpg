@@ -26,3 +26,5 @@ tokio-util = { version = "0.7.10", features = ["codec"] }
 futures-util = "0.3.29"
 clap = { version = "4.4.11", features = ["derive"] }
 shell-escape = "0.1.5"
+serde_yaml = "0.9.27"
+deser-hjson = "2.2.4"

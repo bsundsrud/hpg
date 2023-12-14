@@ -1,10 +1,11 @@
+use clap::Parser;
 use console::style;
 use error::HpgError;
 use tracker::TRACKER;
 
 use std::collections::HashMap;
 use std::fs::File;
-use structopt::StructOpt;
+
 use task::LuaState;
 use task::Variables;
 
@@ -36,10 +37,10 @@ fn parse_variable(s: &str) -> Result<(String, String)> {
     Ok((k.to_string(), v.to_string()))
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "hpg", about = "config management tool")]
+#[derive(Debug, Parser)]
+#[command(name = "hpg", about = "config management tool")]
 struct Opt {
-    #[structopt(
+    #[arg(
         short,
         long,
         name = "CONFIG",
@@ -47,45 +48,44 @@ struct Opt {
         help = "Path to hpg config file"
     )]
     config: String,
-    #[structopt(
-        short = "D",
+    #[arg(
+        short = 'D',
         long = "default-targets",
         name = "default-targets",
         help = "Run default targets in config"
     )]
     run_defaults: bool,
-    #[structopt(
-        short = "v",
+    #[arg(
+        short = 'v',
         long = "var",
         name = "KEY=VALUE",
         help = "Key-value pairs to add as variables",
-        parse(try_from_str = parse_variable),
-        conflicts_with("VARS-FILE")
+        value_parser(parse_variable)
     )]
     variables: Vec<(String, String)>,
-    #[structopt(
+    #[arg(
         long = "vars",
         name = "VARS-FILE",
         help = "Path to JSON variables file"
     )]
-    var_file: Option<String>,
-    #[structopt(
+    var_file: Vec<String>,
+    #[arg(
         long = "lsp-defs",
         help = "Output LSP definitions for HPG to .meta/hpgdefs.lua.  Compatible with EmmyLua and lua-language-server."
     )]
     lsp_defs: bool,
-    #[structopt(
+    #[arg(
         long = "raw-lsp-defs",
         help = "Output LSP definitions for HPG to stdout.  Compatible with EmmyLua and lua-language-server."
     )]
     raw_lsp_defs: bool,
-    #[structopt(short, long, help = "Show planned execution but do not execute")]
+    #[arg(short, long, help = "Show planned execution but do not execute")]
     show: bool,
-    #[structopt(short, long, help = "Show available targets")]
+    #[arg(short, long, help = "Show available targets")]
     list: bool,
-    #[structopt(long, help = "Show debug output")]
+    #[arg(long, help = "Show debug output")]
     debug: bool,
-    #[structopt(name = "TARGETS", help = "Task names to run")]
+    #[arg(name = "TARGETS", help = "Task names to run")]
     targets: Vec<String>,
 }
 
@@ -94,7 +94,7 @@ fn lsp_defs() -> &'static str {
 }
 
 fn run_hpg() -> Result<()> {
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     if opt.lsp_defs {
         let path = std::path::PathBuf::from("./.meta");
         std::fs::create_dir_all(&path)?;
@@ -136,16 +136,17 @@ fn run_hpg() -> Result<()> {
     lua.register_fn(modules::systemd_service)?;
     lua.register_fn(modules::user)?;
 
-    let v = if let Some(f) = opt.var_file {
+    let vars: HashMap<String, String> = opt.variables.into_iter().collect();
+    let json = serde_json::to_value(&vars).unwrap();
+    let mut v = Variables::from_json(json);
+
+    for f in opt.var_file {
         let s = load_file(&f)?;
         let json = serde_json::from_str(&s)
             .map_err(|e| HpgError::Parse(format!("Invalid vars file: {}", e)))?;
-        Variables::from_json(json)
-    } else {
-        let vars: HashMap<String, String> = opt.variables.into_iter().collect();
-        let json = serde_json::to_value(&vars).unwrap();
-        Variables::from_json(json)
-    };
+        let file_vars = Variables::from_json(json);
+        v = file_vars.merge(v)?;
+    }
     let lua = lua.eval(&code, v)?;
     if opt.list {
         output!("{}", style("Available Tasks").cyan());

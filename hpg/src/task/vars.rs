@@ -1,6 +1,9 @@
 use mlua::{Lua, MetaMethod, UserData, Value};
 
-use crate::{actions::util, error};
+use crate::{
+    actions::util,
+    error::{self, HpgError},
+};
 
 #[derive(Debug)]
 pub struct Variables {
@@ -16,7 +19,9 @@ impl Variables {
         if let serde_json::Value::Object(ref o) = self.raw {
             Ok(o.get(key))
         } else {
-            Err(error::action_error("Invalid variables type, must be a JSON Object".to_string()))
+            Err(error::action_error(
+                "Invalid variables type, must be a JSON Object".to_string(),
+            ))
         }
     }
 
@@ -51,6 +56,30 @@ impl Variables {
     ) -> Result<(), mlua::Error> {
         ctx.set_named_registry_value(key, val)?;
         Ok(())
+    }
+
+    pub fn merge(self, other: Variables) -> Result<Variables, HpgError> {
+        let raw = merge_objects(self.raw, other.raw)?;
+        Ok(Variables::from_json(raw))
+    }
+}
+
+fn merge_objects(
+    left: serde_json::Value,
+    right: serde_json::Value,
+) -> Result<serde_json::Value, HpgError> {
+    use serde_json::Value;
+
+    match (left, right) {
+        (Value::Object(mut left), Value::Object(mut right)) => {
+            left.append(&mut right);
+            Ok(Value::Object(left))
+        }
+        _ => {
+            return Err(HpgError::Parse(
+                "Only JSON Objects can be merged".to_string(),
+            ));
+        }
     }
 }
 

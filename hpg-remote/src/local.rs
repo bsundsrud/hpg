@@ -10,6 +10,7 @@ use crate::{
 
 pub fn find_hpg_files(root: &Path) -> Result<Vec<LocalFile>> {
     let mut files = Vec::new();
+
     for res in WalkBuilder::new(root)
         .add_custom_ignore_filename(".hpgignore")
         .build()
