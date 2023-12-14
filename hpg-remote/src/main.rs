@@ -27,7 +27,7 @@ pub struct LocalOpts {
         value_parser(try_parse_host)
     )]
     host: HostInfo,
-    #[arg(name = "Remote path to config dir", short = 'p', long)]
+    #[arg(help = "Remote path to config dir", short = 'p', long = "remote-path")]
     remote_path: Option<String>,
     #[arg(name = "HPG-ARGS", help = "Arguments to hpg")]
     targets: Vec<String>,
