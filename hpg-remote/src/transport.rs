@@ -2,7 +2,7 @@ use std::mem::size_of;
 
 use crate::{
     error::{HpgRemoteError, Result},
-    types::Message,
+    types::SyncMessage,
 };
 
 use tokio_util::{
@@ -15,7 +15,7 @@ const HEADER_SIZE: usize = size_of::<u64>();
 pub struct HpgCodec {}
 
 impl Decoder for HpgCodec {
-    type Item = Message;
+    type Item = SyncMessage;
     type Error = HpgRemoteError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -42,10 +42,10 @@ impl Decoder for HpgCodec {
     }
 }
 
-impl Encoder<Message> for HpgCodec {
+impl Encoder<SyncMessage> for HpgCodec {
     type Error = HpgRemoteError;
 
-    fn encode(&mut self, item: Message, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: SyncMessage, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let mut bytes: Vec<u8> = Vec::new();
         ciborium::into_writer(&item, &mut bytes)?;
         let length: u64 = bytes.len().try_into().unwrap();

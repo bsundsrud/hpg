@@ -2,7 +2,7 @@ use crate::{
     error::{HpgRemoteError, Result},
     local,
     transport::HpgCodec,
-    types::{FilePatch, Message, PatchType},
+    types::{ExecCommand, FilePatch, PatchType, SyncMessage},
     HostInfo,
 };
 use async_trait::async_trait;
@@ -78,22 +78,24 @@ impl Session {
         let mut hpg_writer = FramedWrite::new(channel.make_writer(), HpgCodec {});
         let mut hpg_reader = FramedRead::new(channel.make_reader(), HpgCodec {});
 
-        hpg_writer.send(Message::List(local_files)).await?;
+        hpg_writer.send(SyncMessage::List(local_files)).await?;
         println!("wrote data");
         let mut patches: HashSet<PathBuf> = HashSet::new();
         let mut started = false;
         loop {
             if patches.is_empty() && started {
                 println!("Sending close");
-                hpg_writer.send(Message::Close).await?;
+                hpg_writer.send(SyncMessage::Close).await?;
                 break;
             }
             match hpg_reader.next().await {
                 Some(Ok(response)) => {
                     println!("got response {:?}", response);
                     match response {
-                        Message::List(_) => unreachable!("Client does not receive list requests"),
-                        Message::Info(i) => {
+                        SyncMessage::List(_) => {
+                            unreachable!("Client does not receive list requests")
+                        }
+                        SyncMessage::Info(i) => {
                             for file in i {
                                 dbg!(&file);
                                 patches.insert(file.rel_path.clone());
@@ -103,7 +105,7 @@ impl Session {
                                     crate::types::FileStatus::Present { sig } => {
                                         let delta = generate_delta(&full_path, &sig)?;
                                         println!("Calculated delta, {} bytes", delta.len());
-                                        let patch = Message::Patch(FilePatch {
+                                        let patch = SyncMessage::Patch(FilePatch {
                                             rel_path: file.rel_path,
                                             patch: PatchType::Partial { delta },
                                         });
@@ -113,7 +115,7 @@ impl Session {
                                         let contents =
                                             read_file_to_bytes(&root_path.join(&file.rel_path))
                                                 .await?;
-                                        let patch = Message::Patch(FilePatch {
+                                        let patch = SyncMessage::Patch(FilePatch {
                                             rel_path: file.rel_path,
                                             patch: PatchType::Full { contents },
                                         });
@@ -122,21 +124,23 @@ impl Session {
                                 }
                             }
                         }
-                        Message::Patch(_) => unreachable!("Client does not receive Patch requests"),
-                        Message::Error(e) => {
+                        SyncMessage::Patch(_) => {
+                            unreachable!("Client does not receive Patch requests")
+                        }
+                        SyncMessage::Error(e) => {
                             return Err(HpgRemoteError::Unknown(format!(
                                 "Error during sync: {}",
                                 e
                             )));
                         }
-                        Message::Debug(s) => {
+                        SyncMessage::Debug(s) => {
                             println!("REMOTE: {}", s);
                         }
-                        Message::PatchApplied(p) => {
+                        SyncMessage::PatchApplied(p) => {
                             println!("Applied patch to {:?}", p);
                             patches.remove(&p);
                         }
-                        Message::Close => break,
+                        SyncMessage::Close => break,
                     }
                 }
                 Some(Err(e)) => {

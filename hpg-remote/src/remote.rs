@@ -17,7 +17,7 @@ use tokio_util::codec::{FramedRead, FramedWrite};
 use crate::{
     error::{HpgRemoteError, Result},
     transport::HpgCodec,
-    types::{debug, FileInfo, FileStatus, FileType, LocalFile, Message, PatchType},
+    types::{debug, FileInfo, FileStatus, FileType, LocalFile, PatchType, SyncMessage},
 };
 
 pub async fn start_remote(root_dir: PathBuf) -> Result<()> {
@@ -36,11 +36,11 @@ pub async fn start_remote(root_dir: PathBuf) -> Result<()> {
                 Ok(None) => break,
                 Ok(Some(_)) => continue,
                 Err(e) => {
-                    hpg_writer.send(Message::Error(e.to_string())).await?;
+                    hpg_writer.send(SyncMessage::Error(e.to_string())).await?;
                 }
             },
             Ok(Some(Err(e))) => {
-                hpg_writer.send(Message::Error(e.to_string())).await?;
+                hpg_writer.send(SyncMessage::Error(e.to_string())).await?;
                 return Err(e);
             }
             Ok(None) => break,
@@ -52,7 +52,7 @@ pub async fn start_remote(root_dir: PathBuf) -> Result<()> {
 }
 
 async fn handle_message(
-    msg: Message,
+    msg: SyncMessage,
     root_dir: &Path,
     writer: &mut FramedWrite<Stdout, HpgCodec>,
 ) -> Result<Option<()>> {
@@ -60,20 +60,20 @@ async fn handle_message(
         .send(debug(format!("Received message: {:?}", msg)))
         .await?;
     match msg {
-        Message::List(l) => {
+        SyncMessage::List(l) => {
             let info = check_dir(&root_dir, &l);
             writer
                 .send(debug(format!("Calculated: {:?}", info)))
                 .await?;
             let info = info?;
-            writer.send(Message::Info(info)).await?;
+            writer.send(SyncMessage::Info(info)).await?;
             writer.send(debug("sent fileinfo")).await?;
         }
-        Message::Info(_) => {
+        SyncMessage::Info(_) => {
             // Server should not receive Info messages
             return Err(HpgRemoteError::Unknown("Invalid message type Info".into()));
         }
-        Message::Patch(p) => {
+        SyncMessage::Patch(p) => {
             let full_path = root_dir.join(&p.rel_path);
             match p.patch {
                 PatchType::Full { contents } => {
@@ -89,19 +89,19 @@ async fn handle_message(
                     apply_patch(&full_path, &delta)?;
                 }
             }
-            writer.send(Message::PatchApplied(p.rel_path)).await?;
+            writer.send(SyncMessage::PatchApplied(p.rel_path)).await?;
         }
-        Message::Error(e) => {
+        SyncMessage::Error(e) => {
             // On the server side, there's no error recovery we can do. Just exit
             return Err(HpgRemoteError::Unknown(e));
         }
-        Message::Debug(_) => {
+        SyncMessage::Debug(_) => {
             unreachable!("Remote does not handle Debug");
         }
-        Message::PatchApplied(_) => {
+        SyncMessage::PatchApplied(_) => {
             unreachable!("Remote does not handle PatchApplied");
         }
-        Message::Close => return Ok(None),
+        SyncMessage::Close => return Ok(None),
     }
     Ok(Some(()))
 }

@@ -38,7 +38,7 @@ pub enum PatchType {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum Message {
+pub enum SyncMessage {
     List(Vec<LocalFile>),
     Info(Vec<FileInfo>),
     Patch(FilePatch),
@@ -48,6 +48,20 @@ pub enum Message {
     Close,
 }
 
-pub fn debug<S: Into<String>>(msg: S) -> Message {
-    Message::Debug(msg.into())
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ExecServerMessage {
+    Stdout(String),
+    Stderr(String),
+    Result(u16),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExecCommand {
+    pub exe: String,
+    pub args: Vec<String>,
+    pub cwd: String,
+}
+
+pub fn debug<S: Into<String>>(msg: S) -> SyncMessage {
+    SyncMessage::Debug(msg.into())
 }
