@@ -1,7 +1,7 @@
 use crate::{
     error::{HpgRemoteError, Result},
     local,
-    transport::{HpgCodec, StreamMessageReader, StreamMessageWriter},
+    transport::HpgCodec,
     types::{FilePatch, Message, PatchType},
     HostInfo,
 };
@@ -10,22 +10,16 @@ use futures_util::{SinkExt, StreamExt};
 use librsync::whole;
 use russh::{
     client::{self, Handler},
-    ChannelMsg, Disconnect,
+    Disconnect,
 };
 use russh_keys::{key, load_secret_key};
 use std::{
     collections::HashSet,
-    fs::OpenOptions,
-    io::BufWriter,
     path::{Path, PathBuf},
-    pin::Pin,
     sync::Arc,
     time::Duration,
 };
-use tokio::{
-    fs::{self, File},
-    io::{AsyncReadExt, AsyncWriteExt},
-};
+use tokio::{fs::File, io::AsyncReadExt};
 use tokio_util::codec::{FramedRead, FramedWrite};
 pub struct Client {}
 
@@ -64,13 +58,21 @@ impl Session {
         Ok(Self { session })
     }
 
-    pub async fn open_remote(&mut self, root_path: &Path, exe_path: Option<String>) -> Result<()> {
+    pub async fn sync_files(
+        &mut self,
+        root_path: &Path,
+        remote_path: &str,
+        exe_path: Option<String>,
+    ) -> Result<()> {
         let mut channel = self.session.channel_open_session().await?;
+        let exe_path = if let Some(ref s) = exe_path {
+            &s
+        } else {
+            "hpg-remote"
+        };
+
         channel
-            .exec(
-                true,
-                "/home/benn/bin/hpg-remote server /home/benn/hpg-remote-testing",
-            )
+            .exec(true, format!("{} server {}", exe_path, remote_path))
             .await?;
         let local_files = local::find_hpg_files(&root_path)?;
         let mut hpg_writer = FramedWrite::new(channel.make_writer(), HpgCodec {});

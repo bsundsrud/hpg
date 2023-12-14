@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
+use clap::Parser;
 use error::{HpgRemoteError, Result};
-use structopt::StructOpt;
 
 mod error;
 mod local;
@@ -10,28 +10,36 @@ mod ssh;
 mod transport;
 mod types;
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "hpg-remote", about = "Run HPG remotely")]
+#[derive(Debug, Parser)]
+#[command(author, version, about = "Run HPG remotely")]
 pub(crate) enum Opt {
+    #[command(hide(true))]
     Server(ServerOpts),
-    Push(LocalOpts),
+    Ssh(LocalOpts),
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
+#[command(trailing_var_arg(true))]
 pub struct LocalOpts {
-    #[structopt(name = "[USER@]HOST[:PORT]", help = "Remote host address", parse(try_from_str = try_parse_host))]
+    #[arg(
+        name = "[USER@]HOST[:PORT]",
+        help = "Remote host address",
+        value_parser(try_parse_host)
+    )]
     host: HostInfo,
-    #[structopt(name = "TARGETS", help = "Tasks to run on remote host")]
+    #[arg(name = "Remote path to config dir", short = 'p', long)]
+    remote_path: Option<String>,
+    #[arg(name = "HPG-ARGS", help = "Arguments to hpg")]
     targets: Vec<String>,
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
 pub struct ServerOpts {
-    #[structopt(name = "ROOT-DIR", help = "Base dir for HPG sync")]
+    #[arg(name = "ROOT-DIR", help = "Base dir for HPG sync")]
     root_dir: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HostInfo {
     pub hostname: String,
     pub port: Option<u16>,
@@ -39,27 +47,22 @@ pub struct HostInfo {
 }
 
 fn try_parse_host(host_str: &str) -> Result<HostInfo> {
-    let mut user = None;
-    let mut hostname = String::new();
-    let mut port = None;
-    let rest = if let Some((u, rest)) = host_str.split_once("@") {
-        user = Some(u.to_string());
-        rest
+    let (user, rest) = if let Some((u, rest)) = host_str.split_once("@") {
+        (Some(u.to_string()), rest)
     } else {
-        host_str
+        (None, host_str)
     };
 
-    if let Some((h, p)) = rest.split_once(":") {
-        hostname = h.into();
-        port = Some(p.parse::<u16>().map_err(|_e| HpgRemoteError::ParseHost {
+    let (hostname, port) = if let Some((h, p)) = rest.split_once(":") {
+        let port = Some(p.parse::<u16>().map_err(|_e| HpgRemoteError::ParseHost {
             orig: host_str.to_string(),
             reason: "Could not parse port".into(),
         })?);
+        (h.into(), port)
     } else {
-        hostname = rest.into();
-    }
+        (rest.into(), None)
+    };
 
-    //TODO: Actually parse
     Ok(HostInfo {
         hostname,
         port,
@@ -69,14 +72,23 @@ fn try_parse_host(host_str: &str) -> Result<HostInfo> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    match Opt::from_args() {
-        Opt::Push(opts) => {
+    match Opt::parse() {
+        Opt::Ssh(opts) => {
             let ssh_config = dbg!(ssh::load_ssh_config(opts.host, None, None)?);
             let mut client = ssh::Session::connect(ssh_config).await?;
-
-            client
-                .open_remote(&std::env::current_dir().unwrap(), None)
-                .await?;
+            let root_path = std::env::current_dir().unwrap().canonicalize()?;
+            let remote_path: String = if let Some(remote_path) = opts.remote_path {
+                remote_path
+            } else {
+                format!(
+                    "/tmp/hpg/{}",
+                    root_path
+                        .file_name()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "unknown".to_string())
+                )
+            };
+            client.sync_files(&root_path, &remote_path, None).await?;
             client.close().await?;
         }
         Opt::Server(opts) => {

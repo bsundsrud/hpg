@@ -1,77 +1,14 @@
-use std::{io::BufWriter, mem::size_of, pin::Pin};
+use std::mem::size_of;
 
 use crate::{
     error::{HpgRemoteError, Result},
     types::Message,
 };
-use pin_project::pin_project;
-use serde::{de::DeserializeOwned, Serialize};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+
 use tokio_util::{
     bytes::{Buf, BytesMut},
     codec::{Decoder, Encoder},
 };
-
-#[pin_project]
-pub struct StreamMessageReader<T>
-where
-    T: AsyncRead,
-{
-    #[pin]
-    inner: T,
-}
-
-impl<T> StreamMessageReader<T>
-where
-    T: AsyncRead,
-{
-    pub fn new(reader: T) -> Self {
-        Self { inner: reader }
-    }
-
-    pub async fn read<V: DeserializeOwned>(self: Pin<&mut Self>) -> Result<V> {
-        let mut this = self.project();
-        let len = this.inner.read_u64().await?;
-        let mut buf = vec![0u8; len.try_into().unwrap()];
-        this.inner.read_exact(&mut buf).await?;
-        let v = ciborium::from_reader(buf.as_slice())?;
-        Ok(v)
-    }
-}
-
-#[pin_project]
-pub struct StreamMessageWriter<T>
-where
-    T: AsyncWrite,
-{
-    #[pin]
-    inner: T,
-}
-
-impl<T> StreamMessageWriter<T>
-where
-    T: AsyncWrite,
-{
-    pub fn new(writer: T) -> Self {
-        Self { inner: writer }
-    }
-
-    pub async fn write<V: Serialize>(self: Pin<&mut Self>, data: &V) -> Result<()> {
-        let mut buf: Vec<u8> = Vec::new();
-        {
-            let mut writer = BufWriter::new(&mut buf);
-            ciborium::into_writer(&data, &mut writer)?;
-        }
-        let len: u64 = buf.len().try_into().unwrap();
-        let header = len.to_be_bytes();
-        let mut final_buf = Vec::with_capacity(len as usize + header.len());
-        final_buf.extend_from_slice(&header);
-        final_buf.extend_from_slice(&buf);
-        let mut this = self.project();
-        this.inner.write_all(&final_buf).await?;
-        Ok(())
-    }
-}
 
 const HEADER_SIZE: usize = size_of::<u64>();
 
