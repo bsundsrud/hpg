@@ -11,10 +11,10 @@ tokio = { version = "1.32.0", features = ["full"] }
 indicatif = { version = "0.17.7", features = ["improved_unicode"] }
 console = "0.15.7"
 thiserror = "1.0.38"
-russh = { version = "0.40.0", features = ["vendored-openssl"] }
+russh = { version = "0.40.0" }
 russh-config = "0.7.0"
 async-trait = "0.1.74"
-russh-keys = { version = "0.40.0", features = ["vendored-openssl"] }
+russh-keys = { version = "0.40.0" }
 dirs-next = "2.0.0"
 ignore = "0.4.21"
 pathdiff = "0.2.1"

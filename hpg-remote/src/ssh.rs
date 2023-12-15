@@ -2,7 +2,7 @@ use crate::{
     error::{HpgRemoteError, Result},
     local,
     transport::HpgCodec,
-    types::{ExecCommand, FilePatch, PatchType, SyncMessage},
+    types::{ FilePatch, PatchType, SyncClientMessage, SyncServerMessage},
     HostInfo,
 };
 use async_trait::async_trait;
@@ -70,42 +70,41 @@ impl Session {
         } else {
             "hpg-remote"
         };
-
+        let cmdline = format!("{} server {}", exe_path, remote_path);
+        eprintln!("Remote cmdline: {}", cmdline);
         channel
-            .exec(true, format!("{} server {}", exe_path, remote_path))
+            .exec(true, cmdline)
             .await?;
         let local_files = local::find_hpg_files(&root_path)?;
-        let mut hpg_writer = FramedWrite::new(channel.make_writer(), HpgCodec {});
-        let mut hpg_reader = FramedRead::new(channel.make_reader(), HpgCodec {});
+        let encoder: HpgCodec<SyncClientMessage> = HpgCodec::new();
+        let decoder: HpgCodec<SyncServerMessage> = HpgCodec::new();
+        let mut hpg_writer = FramedWrite::new(channel.make_writer(), encoder);
+        let mut hpg_reader = FramedRead::new(channel.make_reader(), decoder);
 
-        hpg_writer.send(SyncMessage::List(local_files)).await?;
-        println!("wrote data");
+        hpg_writer.send(SyncClientMessage::FileList(local_files)).await?;
+        eprintln!("wrote data");
         let mut patches: HashSet<PathBuf> = HashSet::new();
         let mut started = false;
         loop {
             if patches.is_empty() && started {
-                println!("Sending close");
-                hpg_writer.send(SyncMessage::Close).await?;
+                eprintln!("Sending close");
+                hpg_writer.send(SyncClientMessage::Close).await?;
                 break;
             }
             match hpg_reader.next().await {
                 Some(Ok(response)) => {
-                    println!("got response {:?}", response);
+                    eprintln!("got response {:?}", response);
                     match response {
-                        SyncMessage::List(_) => {
-                            unreachable!("Client does not receive list requests")
-                        }
-                        SyncMessage::Info(i) => {
+                        SyncServerMessage::FileStatus(i) => {
                             for file in i {
-                                dbg!(&file);
                                 patches.insert(file.rel_path.clone());
                                 started = true;
                                 let full_path = root_path.join(&file.rel_path);
                                 match file.status {
                                     crate::types::FileStatus::Present { sig } => {
                                         let delta = generate_delta(&full_path, &sig)?;
-                                        println!("Calculated delta, {} bytes", delta.len());
-                                        let patch = SyncMessage::Patch(FilePatch {
+                                        eprintln!("Calculated delta, {} bytes", delta.len());
+                                        let patch = SyncClientMessage::Patch(FilePatch {
                                             rel_path: file.rel_path,
                                             patch: PatchType::Partial { delta },
                                         });
@@ -115,7 +114,7 @@ impl Session {
                                         let contents =
                                             read_file_to_bytes(&root_path.join(&file.rel_path))
                                                 .await?;
-                                        let patch = SyncMessage::Patch(FilePatch {
+                                        let patch = SyncClientMessage::Patch(FilePatch {
                                             rel_path: file.rel_path,
                                             patch: PatchType::Full { contents },
                                         });
@@ -124,30 +123,28 @@ impl Session {
                                 }
                             }
                         }
-                        SyncMessage::Patch(_) => {
-                            unreachable!("Client does not receive Patch requests")
-                        }
-                        SyncMessage::Error(e) => {
+                        SyncServerMessage::Error(e) => {
                             return Err(HpgRemoteError::Unknown(format!(
                                 "Error during sync: {}",
                                 e
                             )));
                         }
-                        SyncMessage::Debug(s) => {
-                            println!("REMOTE: {}", s);
+                        SyncServerMessage::Debug(s) => {
+                            eprintln!("REMOTE: {}", s);
                         }
-                        SyncMessage::PatchApplied(p) => {
-                            println!("Applied patch to {:?}", p);
+                        SyncServerMessage::PatchApplied(p) => {
+                            eprintln!("Applied patch to {:?}", p);
                             patches.remove(&p);
                         }
-                        SyncMessage::Close => break,
                     }
                 }
                 Some(Err(e)) => {
-                    println!("Got Error: {}", e);
+                    eprintln!("Got Error: {}", e);
                     return Err(e);
                 }
-                None => continue,
+                None => {
+                    continue
+                },
             }
         }
 

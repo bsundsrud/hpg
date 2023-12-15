@@ -106,7 +106,7 @@ async fn main() -> Result<()> {
             } else {
                 host
             };
-            let ssh_config = dbg!(ssh::load_ssh_config(host, None, None)?);
+            let ssh_config = ssh::load_ssh_config(host, None, None)?;
             let mut client = ssh::Session::connect(ssh_config).await?;
             let root_path = std::env::current_dir().unwrap().canonicalize()?;
 

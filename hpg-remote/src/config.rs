@@ -50,7 +50,7 @@ impl InventoryConfig {
                 ));
             }
         };
-        Ok(dbg!(config))
+        Ok(config)
     }
 
     pub fn config_for_host(&self, host: &str) -> Option<&HostConfig> {

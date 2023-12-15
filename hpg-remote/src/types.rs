@@ -37,31 +37,69 @@ pub enum PatchType {
     Partial { delta: Vec<u8> },
 }
 
+/* 
+Message Flow
+============
+
+Sync
+----
+
+Client              Server
+-------------------------------
+FileList --->                       Lists local files/dirs waiting to be synced
+         <---      FileStatus       Returns file status for to-be-synced files.  Either absent or the file signature
+Patch    --->                       Sends deltas for files to server (one message per file)
+         <---     PatchApplied      Delta applied successfully (one message per file)
+
+         ***
+         <---       Error           If an error happens on the server side, an error with a description will be returned to the client
+         <---       Debug           Send message back to client for debugging purposes
+
+         ***
+Close    --->                       Sent when sync is done or if an error happens client-side
+
+Exec
+----
+
+Client              Server
+-------------------------------
+Exec     --->                       Run HPG on server side
+         <---       Event           Report progress back to client
+         <---       Finish          Report done, summary, and success/failure
+
+          **
+Cancel   --->                       Cancel current server-side run and exit
+        
+*/
+
 #[derive(Debug, Serialize, Deserialize)]
-pub enum SyncMessage {
-    List(Vec<LocalFile>),
-    Info(Vec<FileInfo>),
+pub enum SyncClientMessage {
+    FileList(Vec<LocalFile>),
     Patch(FilePatch),
-    PatchApplied(PathBuf),
-    Error(String),
-    Debug(String),
     Close,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum ExecServerMessage {
-    Stdout(String),
-    Stderr(String),
-    Result(u16),
+pub enum SyncServerMessage {
+    FileStatus(Vec<FileInfo>),
+    PatchApplied(PathBuf),
+    Error(String),
+    Debug(String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ExecCommand {
-    pub exe: String,
-    pub args: Vec<String>,
-    pub cwd: String,
+pub enum ExecClientMessage {
+    Exec,
+    Cancel
 }
 
-pub fn debug<S: Into<String>>(msg: S) -> SyncMessage {
-    SyncMessage::Debug(msg.into())
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ExecServerMessage {
+    Event,
+    Finish
+}
+
+
+pub fn debug<S: Into<String>>(msg: S) -> SyncServerMessage {
+    SyncServerMessage::Debug(msg.into())
 }

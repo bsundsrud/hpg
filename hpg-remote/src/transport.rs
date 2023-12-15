@@ -1,10 +1,10 @@
-use std::mem::size_of;
+use std::{mem::size_of, marker::PhantomData};
 
 use crate::{
     error::{HpgRemoteError, Result},
-    types::SyncMessage,
 };
 
+use serde::{de::DeserializeOwned, Serialize};
 use tokio_util::{
     bytes::{Buf, BytesMut},
     codec::{Decoder, Encoder},
@@ -12,10 +12,19 @@ use tokio_util::{
 
 const HEADER_SIZE: usize = size_of::<u64>();
 
-pub struct HpgCodec {}
+pub struct HpgCodec<T> {
+    _data: PhantomData<T>
+}
 
-impl Decoder for HpgCodec {
-    type Item = SyncMessage;
+impl<T> HpgCodec<T> {
+    pub fn new() -> HpgCodec<T> {
+        HpgCodec { _data: PhantomData::default() }
+    }
+}
+
+impl<T> Decoder for HpgCodec<T>
+where T: DeserializeOwned {
+    type Item = T;
     type Error = HpgRemoteError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -42,10 +51,11 @@ impl Decoder for HpgCodec {
     }
 }
 
-impl Encoder<SyncMessage> for HpgCodec {
+impl<T> Encoder<T> for HpgCodec<T>
+where T: Serialize {
     type Error = HpgRemoteError;
 
-    fn encode(&mut self, item: SyncMessage, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: T, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let mut bytes: Vec<u8> = Vec::new();
         ciborium::into_writer(&item, &mut bytes)?;
         let length: u64 = bytes.len().try_into().unwrap();

@@ -17,7 +17,7 @@ use tokio_util::codec::{FramedRead, FramedWrite};
 use crate::{
     error::{HpgRemoteError, Result},
     transport::HpgCodec,
-    types::{debug, FileInfo, FileStatus, FileType, LocalFile, PatchType, SyncMessage},
+    types::{debug, FileInfo, FileStatus, FileType, LocalFile, PatchType, SyncClientMessage, SyncServerMessage},
 };
 
 pub async fn start_remote(root_dir: PathBuf) -> Result<()> {
@@ -27,24 +27,35 @@ pub async fn start_remote(root_dir: PathBuf) -> Result<()> {
     let input = tokio::io::stdin();
     let output = tokio::io::stdout();
 
-    let mut hpg_reader = FramedRead::new(input, HpgCodec {});
-    let mut hpg_writer = FramedWrite::new(output, HpgCodec {});
+    let decoder: HpgCodec<SyncClientMessage> = HpgCodec::new();
+    let encoder: HpgCodec<SyncServerMessage> = HpgCodec::new();
+    
+
+    let mut hpg_reader = FramedRead::new(input, decoder);
+    let mut hpg_writer = FramedWrite::new(output, encoder);
     hpg_writer.send(debug("Started")).await?;
     loop {
-        match time::timeout(Duration::from_secs(5), hpg_reader.next()).await {
+        eprintln!("\nstart loop\n");
+        match time::timeout(Duration::from_secs(500), hpg_reader.next()).await {
             Ok(Some(Ok(msg))) => match handle_message(msg, &root_dir, &mut hpg_writer).await {
                 Ok(None) => break,
                 Ok(Some(_)) => continue,
                 Err(e) => {
-                    hpg_writer.send(SyncMessage::Error(e.to_string())).await?;
+                    hpg_writer.send(SyncServerMessage::Error(e.to_string())).await?;
                 }
             },
             Ok(Some(Err(e))) => {
-                hpg_writer.send(SyncMessage::Error(e.to_string())).await?;
+                hpg_writer.send(SyncServerMessage::Error(e.to_string())).await?;
                 return Err(e);
             }
-            Ok(None) => break,
-            Err(_) => break,
+            Ok(None) => {
+                eprintln!("OK None");
+                break
+            },
+            Err(_) => {
+                eprintln!("Errored");
+                break
+            },
         }
     }
     hpg_writer.send(debug("Shutdown")).await?;
@@ -52,28 +63,24 @@ pub async fn start_remote(root_dir: PathBuf) -> Result<()> {
 }
 
 async fn handle_message(
-    msg: SyncMessage,
+    msg: SyncClientMessage,
     root_dir: &Path,
-    writer: &mut FramedWrite<Stdout, HpgCodec>,
+    writer: &mut FramedWrite<Stdout, HpgCodec<SyncServerMessage>>,
 ) -> Result<Option<()>> {
     writer
         .send(debug(format!("Received message: {:?}", msg)))
         .await?;
     match msg {
-        SyncMessage::List(l) => {
+        SyncClientMessage::FileList(l) => {
             let info = check_dir(&root_dir, &l);
             writer
                 .send(debug(format!("Calculated: {:?}", info)))
                 .await?;
             let info = info?;
-            writer.send(SyncMessage::Info(info)).await?;
+            writer.send(SyncServerMessage::FileStatus(info)).await?;
             writer.send(debug("sent fileinfo")).await?;
         }
-        SyncMessage::Info(_) => {
-            // Server should not receive Info messages
-            return Err(HpgRemoteError::Unknown("Invalid message type Info".into()));
-        }
-        SyncMessage::Patch(p) => {
+        SyncClientMessage::Patch(p) => {
             let full_path = root_dir.join(&p.rel_path);
             match p.patch {
                 PatchType::Full { contents } => {
@@ -89,20 +96,11 @@ async fn handle_message(
                     apply_patch(&full_path, &delta)?;
                 }
             }
-            writer.send(SyncMessage::PatchApplied(p.rel_path)).await?;
+            writer.send(SyncServerMessage::PatchApplied(p.rel_path)).await?;
         }
-        SyncMessage::Error(e) => {
-            // On the server side, there's no error recovery we can do. Just exit
-            return Err(HpgRemoteError::Unknown(e));
-        }
-        SyncMessage::Debug(_) => {
-            unreachable!("Remote does not handle Debug");
-        }
-        SyncMessage::PatchApplied(_) => {
-            unreachable!("Remote does not handle PatchApplied");
-        }
-        SyncMessage::Close => return Ok(None),
+        SyncClientMessage::Close => return Ok(None),
     }
+    eprintln!("\nshould loop\n");
     Ok(Some(()))
 }
 
