@@ -61,7 +61,7 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
         let installed = apt.install_packages(&packages).map_err(error::task_error)?;
         let res = installed
             .into_iter()
-            .map(|i| package_status_to_lua(ctx.clone(), &i))
+            .map(|i| package_status_to_lua(ctx, &i))
             .collect::<Result<Vec<Table<'_>>, mlua::Error>>()?;
         Ok(res)
     })?;
@@ -74,7 +74,7 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
             .remove_packages(&r)
             .map_err(error::task_error)?
             .into_iter()
-            .map(|p| package_status_to_lua(ctx.clone(), &p))
+            .map(|p| package_status_to_lua(ctx, &p))
             .collect::<Result<Vec<Table<'_>>, mlua::Error>>()?;
         Ok(packages)
     })?;
@@ -124,7 +124,7 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
             let installed = apt.install_packages(&packages).map_err(error::task_error)?;
             let results = installed
                 .into_iter()
-                .map(|i| package_status_to_lua(ctx.clone(), &i))
+                .map(|i| package_status_to_lua(ctx, &i))
                 .collect::<Result<Vec<Table<'_>>, mlua::Error>>()?;
             res_tbl.set("updated", true)?;
             res_tbl.set("packages", results)?;
