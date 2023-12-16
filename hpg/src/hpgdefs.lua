@@ -113,8 +113,8 @@ end
 local File = {}
 
 ---@class FileAppendOpts
----@field src string? Source file to read from. Exclusive with `contents`.
----@field contents string? Text to append. Exclusive with `src`.
+---@field src? string Source file to read from. Exclusive with `contents`.
+---@field contents? string Text to append. Exclusive with `src`.
 ---@field marker string Text to insert as a region marker. Should be a comment line, according to file type.
 
 --- Append to an existing file, without overwriting unrelated sections.
@@ -126,8 +126,8 @@ function File:append(options)
 end
 
 ---@class FileAppendTemplateOpts
----@field src string Source file to read from. Exclusive with `contents`.
----@field contents string Text to append. Exclusive with `src`.
+---@field src? string Source file to read from. Exclusive with `contents`.
+---@field contents? string Text to append. Exclusive with `src`.
 ---@field marker string Text to insert as a region marker. Should be a comment line, according to file type.
 ---@field context table<string, any>? Variables available within the template.
 
