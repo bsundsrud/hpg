@@ -7,7 +7,7 @@
 --- task dependencies and execution order has been defined.
 ---@param description string Human description of the task
 ---@param dependency? Task|Task[] Other task names that must run before this one.
----@param body function? Task body, code to run on task execution.
+---@param body? function Task body, code to run on task execution.
 ---@return Task Task object that can be used for dependencies
 ---@overload fun(description: string, body: function)
 function task(description, dependency, body)
@@ -28,7 +28,7 @@ end
 --- Create a sigil for task cancellation (with optional reason).
 --- Use `return cancel(reason)` in a task to immediately cancel the
 --- current task and skip any downstream dependent task.
----@param reason string? Reason for cancellation.
+---@param reason? string Reason for cancellation.
 ---@return userdata sigil cancellation marker
 function cancel(reason)
 end
@@ -55,7 +55,7 @@ end
 
 --- Create a Dir object pointing to a user's home directory.
 ---- Runtime error raised if user's home directory is not available.
----@param user string? Optional user to get the home directory for.  If omitted, current effective user is assumed.
+---@param user? string Optional user to get the home directory for.  If omitted, current effective user is assumed.
 ---@return Dir dir Dir instance
 function homedir(user)
 end
@@ -285,14 +285,14 @@ function user_exists(username)
 end
 
 ---@class ExecOpts
----@field args string[]? Arguments to pass to the command.
----@field inherit_env boolean? Inherit environment from this process. Default `true`.
----@field env table<string, string>? Environment variables to inject into subprocess.
----@field cwd string? Working directory of command.
----@field stdout boolean? Capture stdout of the process. Default `true`.
----@field stderr boolean? Capture stderr of the process. Default `true`.
----@field echo boolean? Echo stdout and stderr of process to HPG's stdout. Default `true`.
----@field ignore_exit boolean? If `true`, will not halt task execution on nonzero exit status.
+---@field args? string[] Arguments to pass to the command.
+---@field inherit_env? boolean Inherit environment from this process. Default `true`.
+---@field env? table<string, string> Environment variables to inject into subprocess.
+---@field cwd? string Working directory of command.
+---@field stdout? boolean Capture stdout of the process. Default `true`.
+---@field stderr? boolean Capture stderr of the process. Default `true`.
+---@field echo? boolean Echo stdout and stderr of process to HPG's stdout. Default `true`.
+---@field ignore_exit? boolean If `true`, will not halt task execution on nonzero exit status.
 
 ---@class ExitStatus
 ---@field status number Numeric exit status of process.
@@ -301,7 +301,7 @@ end
 
 --- Run an executable as a subprocess.
 ---@param cmd string Path to executable.
----@param opts ExecOpts? Options for subprocess.
+---@param opts? ExecOpts Options for subprocess.
 ---@return ExitStatus status Exit status and output from process.
 function exec(cmd, opts)
 end
@@ -317,15 +317,15 @@ function groupmod(name, opts)
 end
 
 ---@class ShellOpts
----@field inherit_env boolean? Inherit environment from this process. Default `true`.
----@field env table<string, string>? Environment variables to inject into subprocess.
----@field cwd string? Working directory of command.
----@field stdout boolean? Capture stdout of the process. Default `true`.
----@field stderr boolean? Capture stderr of the process. Default `true`.
----@field echo boolean? Echo stdout and stderr of process to HPG's stdout. Default `true`.
----@field ignore_exit boolean? If `true`, will not halt task execution on nonzero exit status.
----@field sh string? Shell to run this command with. Default `/bin/sh`.
----@field sh_args string[]? Extra arguments to pass to the shell.
+---@field inherit_env? boolean Inherit environment from this process. Default `true`.
+---@field env? table<string, string> Environment variables to inject into subprocess.
+---@field cwd? string Working directory of command.
+---@field stdout? boolean Capture stdout of the process. Default `true`.
+---@field stderr? boolean Capture stderr of the process. Default `true`.
+---@field echo? boolean Echo stdout and stderr of process to HPG's stdout. Default `true`.
+---@field ignore_exit? boolean If `true`, will not halt task execution on nonzero exit status.
+---@field sh? string Shell to run this command with. Default `/bin/sh`.
+---@field sh_args? string[] Extra arguments to pass to the shell.
 
 --- Run a command via a subshell.
 --- Copies `cmd` to a text file and executes that file as a shell script.
@@ -336,15 +336,15 @@ function shell(cmd, opts)
 end
 
 ---@class UserOpts
----@field comment string? Comment for user, also used as "Real Name".
----@field home_dir string? Home directory of user.
----@field group string? Primary group of user.
----@field groups string[]? String list of supplemental groups to add user to.
----@field is_system boolean? Set user account as a system account. Defaults to `false`.
----@field create_home boolean? Create the user's home directory, if it doesn't exist. Defaults to `false`.
----@field create_user_group boolean? Create a group with the same name as the user, for use as the primary group. Defaults to `true`.
----@field uid number? Directly set uid of user, rather than be assigned one.
----@field shell string? Login shell for user. Defaults to `/usr/bin/nologin/`.
+---@field comment? string Comment for user, also used as "Real Name".
+---@field home_dir? string Home directory of user.
+---@field group? string Primary group of user.
+---@field groups? string[] String list of supplemental groups to add user to.
+---@field is_system? boolean Set user account as a system account. Defaults to `false`.
+---@field create_home? boolean Create the user's home directory, if it doesn't exist. Defaults to `false`.
+---@field create_user_group? boolean Create a group with the same name as the user, for use as the primary group. Defaults to `true`.
+---@field uid? number Directly set uid of user, rather than be assigned one.
+---@field shell? string Login shell for user. Defaults to `/usr/bin/nologin/`.
 
 --- Create or modify a user.
 ---@param name string Username of user to create/modify.
@@ -394,7 +394,7 @@ machine.uname = {}
 
 --- Create a new instance of `Archive`.
 ---@param path string Path to archive file.
----@param opts ArchiveOpts? Options for the archive.
+---@param opts? ArchiveOpts Options for the archive.
 ---@return Archive archive `Archive` instance.
 function archive(path, opts)
 end
@@ -410,9 +410,9 @@ function Archive:extract(dst)
 end
 
 ---@class InstallOpts
----@field url string? URL to fetch from.  If omitted, `archive_path` is assumed to exist already locally.
----@field hash string? SHA-256 hash of the archive.  If omitted, the archive will always be extracted.
----@field install_dir string? If omitted, defaults to `extract_dir`. Useful if the archive contains one or more layers of directories, it is then used to point at the final application directory.  The hash of the archive will be written into this dir at `.hpg-hash`.
+---@field url? string URL to fetch from.  If omitted, `archive_path` is assumed to exist already locally.
+---@field hash? string SHA-256 hash of the archive.  If omitted, the archive will always be extracted.
+---@field install_dir? string If omitted, defaults to `extract_dir`. Useful if the archive contains one or more layers of directories, it is then used to point at the final application directory.  The hash of the archive will be written into this dir at `.hpg-hash`.
 
 --- Fetch and extract an archive.
 --- Only extracts if the archive is not present or hash differs.
