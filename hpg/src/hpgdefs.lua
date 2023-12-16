@@ -1,10 +1,10 @@
+---@meta hpg
 ---@diagnostic disable: lowercase-global, missing-return
 
 --- Task sigil type
 ---@class Task
-
---- Defines an HPG task. Task bodies are not evaluated until after
---- task dependencies and execution order has been defined.
+local Task = {}
+--- Defines an HPG task. Task bodies are not evaluated until after task dependencies and execution order has been defined.
 ---@param description string Human description of the task
 ---@param dependency? Task|Task[] Other task names that must run before this one.
 ---@param body? function Task body, code to run on task execution.
@@ -64,7 +64,7 @@ end
 ---@class Dir
 ---@field path string Directory path, as constructed
 ---@field canonical_path string Canonical (fully resolved) directory path. Path must exist.
-local Dir = {}
+local Dir
 
 --- Change directory modes.
 ---@param mode string Octal file mode (such as "0700" or "0755").
