@@ -8,12 +8,144 @@ use std::{
 };
 
 use console::{style, Term};
+use futures_util::SinkExt;
 use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressStyle};
 use lazy_static::lazy_static;
+use tokio_util::codec::FramedWrite;
+
+use crate::remote::{codec::HpgCodec, messages::HpgMessage};
+
+pub struct Tracker {
+    debug: AtomicBool,
+    inner: TrackerInner
+}
+
+impl Tracker {
+    pub fn new_local() -> Self {
+        Self {
+            debug: AtomicBool::new(false),
+            inner: TrackerInner::Local(PrettyTracker::new())
+        }
+    }
+
+    pub fn new_remote() -> Self {
+        Self {
+            debug: AtomicBool::new(false),
+            inner: TrackerInner::Remote(RemoteTracker::new())
+        }
+    }
+
+    pub fn set_debug(&self, debug: bool) {
+        self.debug.store(debug, Ordering::SeqCst)
+    }
+
+    pub fn debug_println(&self, args: Arguments) {
+        if self.debug.load(Ordering::SeqCst) {
+            match &self.inner {
+                TrackerInner::Local(l) => l.debug_println(args),
+                TrackerInner::Remote(_) => todo!(),
+            }
+        }
+    }
+
+    pub fn println(&self, args: Arguments) {
+        match &self.inner {
+            TrackerInner::Local(l) => l.println(args),
+            TrackerInner::Remote(_) => todo!(),
+        }
+    }
+
+    pub fn indent_println(&self, indent: usize, args: Arguments) {
+        match &self.inner {
+            TrackerInner::Local(l) => l.indent_println(indent, args),
+            TrackerInner::Remote(_) => todo!(),
+        }
+    }
+
+    pub fn task<S: Into<String>>(&self, msg: S) {
+        match &self.inner {
+            TrackerInner::Local(l) => l.task(msg),
+            TrackerInner::Remote(_) => todo!(),
+        }
+    }
+
+    pub fn run(&self, count: u64) {
+        match &self.inner {
+            TrackerInner::Local(l) => l.run(count),
+            TrackerInner::Remote(_) => todo!(),
+        }
+    }
+
+    pub fn task_success(&self) {
+        match &self.inner {
+            TrackerInner::Local(l) => l.task_success(),
+            TrackerInner::Remote(_) => todo!(),
+        }
+    }
+
+    pub fn task_skip(&self) {
+        match &self.inner {
+            TrackerInner::Local(l) => l.task_skip(),
+            TrackerInner::Remote(_) => todo!(),
+        }
+    }
+
+    pub fn task_fail(&self) {
+        match &self.inner {
+            TrackerInner::Local(l) => l.task_fail(),
+            TrackerInner::Remote(_) => todo!(),
+        }
+    }
+
+    pub fn finish_success(&self) {
+        match &self.inner {
+            TrackerInner::Local(l) => l.finish_success(),
+            TrackerInner::Remote(_) => todo!(),
+        }
+    }
+
+    pub fn finish_fail(&self) {
+        match &self.inner {
+            TrackerInner::Local(l) => l.finish_fail(),
+            TrackerInner::Remote(_) => todo!(),
+        }
+    }
+}
+
+pub enum TrackerInner {
+    Local(PrettyTracker),
+    Remote(RemoteTracker)
+}
+
+pub struct RemoteTracker {
+    writer: FramedWrite<tokio::io::Stdout, HpgCodec<HpgMessage>>,
+    runtime: tokio::runtime::Runtime,
+
+}
+
+impl RemoteTracker {
+    fn new() -> Self {
+        let stdout = tokio::io::stdout();
+        let encoder = HpgCodec::new();
+        let writer = FramedWrite::new(stdout, encoder);
+        let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+
+        Self {
+            writer,
+            runtime
+        }
+    }
+
+    pub fn debug_println(&self, args: Arguments) {
+        let msg = HpgMessage::Debug(args.to_string());
+        let writer = self.writer.
+        self.runtime.block_on(async {
+            self.writer.send(msg).await;
+        })
+    }
+}
 
 pub struct PrettyTracker {
-    debug: AtomicBool,
-    server_mode: AtomicBool,
     console: Term,
     bars: MultiProgress,
     run_bar: Mutex<Option<ProgressBar>>,
@@ -22,12 +154,10 @@ pub struct PrettyTracker {
 }
 
 impl PrettyTracker {
-    pub fn new() -> Self {
+    fn new() -> Self {
         let bars = MultiProgress::new();
         bars.set_alignment(indicatif::MultiProgressAlignment::Top);
         Self {
-            debug: AtomicBool::new(false),
-            server_mode: AtomicBool::new(false),
             console: Term::stdout(),
             bars,
             run_bar: Mutex::new(None),
@@ -36,22 +166,13 @@ impl PrettyTracker {
         }
     }
 
-    pub fn set_debug(&self, debug: bool) {
-        self.debug.store(debug, Ordering::SeqCst)
-    }
-
-    pub fn set_server_mode(&self, server_mode: bool) {
-        self.server_mode.store(server_mode, Ordering::SeqCst)
-    }
-
     pub fn debug_println(&self, args: Arguments) {
-        if self.debug.load(Ordering::SeqCst) {
             self.bars.suspend(|| {
                 self.console
                     .write_line(&style(args.to_string()).yellow().dim().to_string())
                     .unwrap();
             });
-        }
+    
     }
 
     pub fn println(&self, args: Arguments) {
@@ -171,5 +292,5 @@ impl PrettyTracker {
 }
 
 lazy_static! {
-    pub static ref TRACKER: PrettyTracker = PrettyTracker::new();
+    pub static ref TRACKER: Tracker = Tracker::new_local();
 }
