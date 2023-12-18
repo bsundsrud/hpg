@@ -29,3 +29,15 @@ tokio = { version = "1.32.0", features = ["full"] }
 indicatif = { version = "0.17.7", features = ["improved_unicode"] }
 console = "0.15.7"
 clap = { version = "4.4.11", features = ["derive"] }
+ignore = "0.4.21"
+russh = "0.40.2"
+russh-keys = "0.40.1"
+russh-config = "0.7.1"
+ciborium = "0.2.1"
+serde_yaml = "0.9.27"
+librsync = "0.2.3"
+pathdiff = "0.2.1"
+tokio-util = { version = "0.7.10", features = ["codec"] }
+futures-util = "0.3.29"
+async-trait = "0.1.74"
+dirs-next = "2.0.0"

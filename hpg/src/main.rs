@@ -1,10 +1,17 @@
+use clap::Args;
+use clap::CommandFactory;
 use clap::Parser;
+use clap::Subcommand;
 use console::style;
 use error::HpgError;
+use error::HpgRemoteError;
+use remote::server;
+use remote::ssh::HostInfo;
 use tracker::TRACKER;
 
 use std::collections::HashMap;
 use std::fs::File;
+use std::path::PathBuf;
 
 use task::LuaState;
 use task::Variables;
@@ -15,6 +22,7 @@ mod hash;
 mod macros;
 pub(crate) mod modules;
 
+mod remote;
 mod task;
 mod tracker;
 
@@ -37,9 +45,83 @@ fn parse_variable(s: &str) -> Result<(String, String)> {
     Ok((k.to_string(), v.to_string()))
 }
 
+fn try_parse_host(host_str: &str) -> Result<HostInfo> {
+    let (user, rest) = if let Some((u, rest)) = host_str.split_once("@") {
+        (Some(u.to_string()), rest)
+    } else {
+        (None, host_str)
+    };
+
+    let (hostname, port) = if let Some((h, p)) = rest.split_once(":") {
+        let port = Some(p.parse::<u16>().map_err(|_e| HpgRemoteError::ParseHost {
+            orig: host_str.to_string(),
+            reason: "Could not parse port".into(),
+        })?);
+        (h.into(), port)
+    } else {
+        (rest.into(), None)
+    };
+
+    Ok(HostInfo {
+        hostname,
+        port,
+        user,
+    })
+}
+
 #[derive(Debug, Parser)]
-#[command(name = "hpg", about = "config management tool")]
+#[command(about, version)]
+#[command(propagate_version = true)]
 struct Opt {
+    #[command(flatten)]
+    globals: GlobalOpt,
+    #[command(subcommand)]
+    cmd: Option<RemoteCommands>,
+}
+
+#[derive(Debug, Subcommand)]
+enum RemoteCommands {
+    #[command(about = "Run HPG Locally")]
+    Local {
+        #[command(flatten)]
+        hpg_opts: HpgOpt,
+    },
+    #[command(about = "Run HPG over SSH")]
+    Ssh {
+        #[arg(
+            name = "[USER@]HOST[:PORT]",
+            help = "Remote host address",
+            value_parser(try_parse_host)
+        )]
+        host: HostInfo,
+        #[command(flatten)]
+        hpg_opts: HpgOpt,
+    },
+    #[command(hide(true))]
+    Server {
+        #[arg(name = "ROOT-DIR", help = "Base dir for HPG sync")]
+        root_dir: String,
+    },
+}
+
+#[derive(Debug, Args)]
+struct GlobalOpt {
+    #[arg(
+        long = "lsp-defs",
+        help = "Output LSP definitions for HPG to .meta/hpgdefs.lua.  Compatible with EmmyLua and lua-language-server."
+    )]
+    lsp_defs: bool,
+    #[arg(
+        long = "raw-lsp-defs",
+        help = "Output LSP definitions for HPG to stdout.  Compatible with EmmyLua and lua-language-server."
+    )]
+    raw_lsp_defs: bool,
+    #[arg(long, help = "Show debug output")]
+    debug: bool,
+}
+
+#[derive(Debug, Parser)]
+struct HpgOpt {
     #[arg(
         short,
         long,
@@ -69,22 +151,10 @@ struct Opt {
         help = "Path to JSON variables file"
     )]
     var_file: Vec<String>,
-    #[arg(
-        long = "lsp-defs",
-        help = "Output LSP definitions for HPG to .meta/hpgdefs.lua.  Compatible with EmmyLua and lua-language-server."
-    )]
-    lsp_defs: bool,
-    #[arg(
-        long = "raw-lsp-defs",
-        help = "Output LSP definitions for HPG to stdout.  Compatible with EmmyLua and lua-language-server."
-    )]
-    raw_lsp_defs: bool,
     #[arg(short, long, help = "Show planned execution but do not execute")]
     show: bool,
     #[arg(short, long, help = "Show available targets")]
     list: bool,
-    #[arg(long, help = "Show debug output")]
-    debug: bool,
     #[arg(name = "TARGETS", help = "Task names to run")]
     targets: Vec<String>,
 }
@@ -93,9 +163,58 @@ fn lsp_defs() -> &'static str {
     include_str!("hpgdefs.lua")
 }
 
+fn parse_variables(opt: &HpgOpt) -> Result<Variables> {
+    let vars: HashMap<String, String> = opt.variables.clone().into_iter().collect();
+    let json = serde_json::to_value(&vars).unwrap();
+    let mut v = Variables::from_json(json);
+
+    for f in opt.var_file.iter() {
+        let s = load_file(&f)?;
+        let json = serde_json::from_str(&s)
+            .map_err(|e| HpgError::Parse(format!("Invalid vars file: {}", e)))?;
+        let file_vars = Variables::from_json(json);
+        v = file_vars.merge(v)?;
+    }
+    Ok(v)
+}
+
+fn run_hpg_local(opt: HpgOpt, lua: LuaState) -> Result<()> {
+    let vars = parse_variables(&opt)?;
+    let code = load_file(&opt.config)?;
+
+    let lua = lua.eval(&code, vars)?;
+    if opt.list {
+        output!("{}", style("Available Tasks").cyan());
+        for (name, task) in lua.available_targets() {
+            indent_output!(1, "{}: {}", style(name).green(), task.description());
+        }
+        return Ok(());
+    }
+    let requested_tasks: Vec<&str> = opt.targets.iter().map(|t| t.as_str()).collect();
+    lua.execute(&requested_tasks, opt.run_defaults, opt.show)?;
+
+    Ok(())
+}
+
+fn run_hpg_server(root_dir: String, lua: LuaState) -> Result<()> {
+    // Start server and do sync
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+
+    let root_path = PathBuf::from(root_dir);
+    std::env::set_current_dir(&root_path)?;
+    rt.block_on(async move { server::start_remote_sync(root_path).await })?;
+
+    // load lua
+
+    // run
+    Ok(())
+}
+
 fn run_hpg() -> Result<()> {
     let opt = Opt::parse();
-    if opt.lsp_defs {
+    if opt.globals.lsp_defs {
         let path = std::path::PathBuf::from("./.meta");
         std::fs::create_dir_all(&path)?;
         let mut f = std::fs::File::options()
@@ -106,12 +225,11 @@ fn run_hpg() -> Result<()> {
         f.write_all(lsp_defs().as_bytes())?;
         return Ok(());
     }
-    if opt.raw_lsp_defs {
+    if opt.globals.raw_lsp_defs {
         println!("{}", lsp_defs());
         return Ok(());
     }
-    TRACKER.set_debug(opt.debug);
-    let code = load_file(&opt.config)?;
+    TRACKER.set_debug(opt.globals.debug);
     let lua = LuaState::new()?;
     lua.register_fn(actions::echo)?;
     lua.register_fn(actions::fail)?;
@@ -136,29 +254,20 @@ fn run_hpg() -> Result<()> {
     lua.register_fn(modules::systemd_service)?;
     lua.register_fn(modules::user)?;
 
-    let vars: HashMap<String, String> = opt.variables.into_iter().collect();
-    let json = serde_json::to_value(&vars).unwrap();
-    let mut v = Variables::from_json(json);
-
-    for f in opt.var_file {
-        let s = load_file(&f)?;
-        let json = serde_json::from_str(&s)
-            .map_err(|e| HpgError::Parse(format!("Invalid vars file: {}", e)))?;
-        let file_vars = Variables::from_json(json);
-        v = file_vars.merge(v)?;
-    }
-    let lua = lua.eval(&code, v)?;
-    if opt.list {
-        output!("{}", style("Available Tasks").cyan());
-        for (name, task) in lua.available_targets() {
-            indent_output!(1, "{}: {}", style(name).green(), task.description());
+    match opt.cmd {
+        Some(RemoteCommands::Local { hpg_opts }) => run_hpg_local(hpg_opts, lua),
+        Some(RemoteCommands::Ssh { host, hpg_opts }) => {
+            output!("SSH {:?}: {:?}", host, hpg_opts);
+            unimplemented!()
         }
-        return Ok(());
+        Some(RemoteCommands::Server { root_dir }) => {
+            unimplemented!()
+        }
+        None => {
+            Opt::command().print_long_help()?;
+            Ok(())
+        }
     }
-    let requested_tasks: Vec<&str> = opt.targets.iter().map(|t| t.as_str()).collect();
-    lua.execute(&requested_tasks, opt.run_defaults, opt.show)?;
-
-    Ok(())
 }
 
 fn main() -> Result<()> {
@@ -174,6 +283,7 @@ fn main() -> Result<()> {
                 error::TaskError::Template(t) => eprintln!("Error in template: {}", t),
                 error::TaskError::Dbus(d) => eprintln!("Dbus error: {}", d),
             },
+            HpgError::Remote(r) => eprintln!("Remote Error: {}", r),
             HpgError::File(f) => eprintln!("Error loading file: {}", f),
             HpgError::Parse(p) => eprintln!("Failed parsing: {}", p),
         }
