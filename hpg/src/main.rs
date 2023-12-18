@@ -196,22 +196,6 @@ fn run_hpg_local(opt: HpgOpt, lua: LuaState) -> Result<()> {
     Ok(())
 }
 
-fn run_hpg_server(root_dir: String, lua: LuaState) -> Result<()> {
-    // Start server and do sync
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()?;
-
-    let root_path = PathBuf::from(root_dir);
-    std::env::set_current_dir(&root_path)?;
-    rt.block_on(async move { server::start_remote_sync(root_path).await })?;
-
-    // load lua
-
-    // run
-    Ok(())
-}
-
 fn run_hpg() -> Result<()> {
     let opt = Opt::parse();
     if opt.globals.lsp_defs {
@@ -261,7 +245,8 @@ fn run_hpg() -> Result<()> {
             unimplemented!()
         }
         Some(RemoteCommands::Server { root_dir }) => {
-            unimplemented!()
+            remote::server::run_hpg_server(root_dir, lua);
+            Ok(())
         }
         None => {
             Opt::command().print_long_help()?;

@@ -13,6 +13,7 @@ use lazy_static::lazy_static;
 
 pub struct PrettyTracker {
     debug: AtomicBool,
+    server_mode: AtomicBool,
     console: Term,
     bars: MultiProgress,
     run_bar: Mutex<Option<ProgressBar>>,
@@ -26,6 +27,7 @@ impl PrettyTracker {
         bars.set_alignment(indicatif::MultiProgressAlignment::Top);
         Self {
             debug: AtomicBool::new(false),
+            server_mode: AtomicBool::new(false),
             console: Term::stdout(),
             bars,
             run_bar: Mutex::new(None),
@@ -36,6 +38,10 @@ impl PrettyTracker {
 
     pub fn set_debug(&self, debug: bool) {
         self.debug.store(debug, Ordering::SeqCst)
+    }
+
+    pub fn set_server_mode(&self, server_mode: bool) {
+        self.server_mode.store(server_mode, Ordering::SeqCst)
     }
 
     pub fn debug_println(&self, args: Arguments) {
