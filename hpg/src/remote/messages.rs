@@ -93,8 +93,20 @@ pub enum ExecClientMessage {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ExecServerMessage {
-    Event,
+    Println(String),
+    Event(ServerEvent),
     Finish,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ServerEvent {
+    TaskStart(String),
+    BatchStart(u64),
+    TaskSuccess,
+    TaskSkip,
+    TaskFail,
+    BatchSuccess,
+    BatchFail,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

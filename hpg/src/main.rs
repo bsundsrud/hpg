@@ -5,6 +5,8 @@ use clap::Subcommand;
 use console::style;
 use error::HpgError;
 use error::HpgRemoteError;
+use remote::comms::MessageBus;
+use remote::comms::SyncBus;
 use remote::server;
 use remote::ssh::HostInfo;
 use tracker::TRACKER;
@@ -12,6 +14,8 @@ use tracker::TRACKER;
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use task::LuaState;
 use task::Variables;
@@ -245,6 +249,8 @@ fn run_hpg() -> Result<()> {
             unimplemented!()
         }
         Some(RemoteCommands::Server { root_dir }) => {
+            let bus = SyncBus::new(tokio::io::stdin(), tokio::io::stdout());
+            TRACKER.into_remote(bus);
             remote::server::run_hpg_server(root_dir, lua);
             Ok(())
         }

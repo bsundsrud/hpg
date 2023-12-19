@@ -1,38 +1,38 @@
 use std::{
     fmt::Arguments,
+    pin::Pin,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Mutex,
+        Arc, Mutex,
     },
     time::{Duration, Instant},
 };
 
 use console::{style, Term};
-use futures_util::SinkExt;
 use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressStyle};
 use lazy_static::lazy_static;
-use tokio_util::codec::FramedWrite;
+use tokio::io::{Stdin, Stdout};
 
-use crate::remote::{codec::HpgCodec, messages::HpgMessage};
+use crate::remote::{
+    comms::SyncBus,
+    messages::{ExecServerMessage, HpgMessage, ServerEvent},
+};
 
 pub struct Tracker {
     debug: AtomicBool,
-    inner: TrackerInner
+    inner: Mutex<TrackerInner>,
 }
 
 impl Tracker {
     pub fn new_local() -> Self {
         Self {
             debug: AtomicBool::new(false),
-            inner: TrackerInner::Local(PrettyTracker::new())
+            inner: Mutex::new(TrackerInner::Local(PrettyTracker::new())),
         }
     }
 
-    pub fn new_remote() -> Self {
-        Self {
-            debug: AtomicBool::new(false),
-            inner: TrackerInner::Remote(RemoteTracker::new())
-        }
+    pub fn into_remote(&self, bus: SyncBus<Stdin, Stdout>) {
+        (*self.inner.lock().unwrap()) = TrackerInner::Remote(RemoteTracker::new(bus));
     }
 
     pub fn set_debug(&self, debug: bool) {
@@ -41,107 +41,164 @@ impl Tracker {
 
     pub fn debug_println(&self, args: Arguments) {
         if self.debug.load(Ordering::SeqCst) {
-            match &self.inner {
+            match &*self.inner.lock().unwrap() {
                 TrackerInner::Local(l) => l.debug_println(args),
-                TrackerInner::Remote(_) => todo!(),
+                TrackerInner::Remote(r) => r.debug_println(args),
             }
         }
     }
 
     pub fn println(&self, args: Arguments) {
-        match &self.inner {
+        match &*self.inner.lock().unwrap() {
             TrackerInner::Local(l) => l.println(args),
-            TrackerInner::Remote(_) => todo!(),
+            TrackerInner::Remote(r) => r.println(args),
         }
     }
 
     pub fn indent_println(&self, indent: usize, args: Arguments) {
-        match &self.inner {
+        match &*self.inner.lock().unwrap() {
             TrackerInner::Local(l) => l.indent_println(indent, args),
-            TrackerInner::Remote(_) => todo!(),
+            TrackerInner::Remote(r) => r.indent_println(indent, args),
         }
     }
 
     pub fn task<S: Into<String>>(&self, msg: S) {
-        match &self.inner {
+        match &*self.inner.lock().unwrap() {
             TrackerInner::Local(l) => l.task(msg),
-            TrackerInner::Remote(_) => todo!(),
+            TrackerInner::Remote(r) => r.task(msg),
         }
     }
 
     pub fn run(&self, count: u64) {
-        match &self.inner {
+        match &*self.inner.lock().unwrap() {
             TrackerInner::Local(l) => l.run(count),
-            TrackerInner::Remote(_) => todo!(),
+            TrackerInner::Remote(r) => r.run(count),
         }
     }
 
     pub fn task_success(&self) {
-        match &self.inner {
+        match &*self.inner.lock().unwrap() {
             TrackerInner::Local(l) => l.task_success(),
-            TrackerInner::Remote(_) => todo!(),
+            TrackerInner::Remote(r) => r.task_success(),
         }
     }
 
     pub fn task_skip(&self) {
-        match &self.inner {
+        match &*self.inner.lock().unwrap() {
             TrackerInner::Local(l) => l.task_skip(),
-            TrackerInner::Remote(_) => todo!(),
+            TrackerInner::Remote(r) => r.task_skip(),
         }
     }
 
     pub fn task_fail(&self) {
-        match &self.inner {
+        match &*self.inner.lock().unwrap() {
             TrackerInner::Local(l) => l.task_fail(),
-            TrackerInner::Remote(_) => todo!(),
+            TrackerInner::Remote(r) => r.task_fail(),
         }
     }
 
     pub fn finish_success(&self) {
-        match &self.inner {
+        match &*self.inner.lock().unwrap() {
             TrackerInner::Local(l) => l.finish_success(),
-            TrackerInner::Remote(_) => todo!(),
+            TrackerInner::Remote(r) => r.finish_success(),
         }
     }
 
     pub fn finish_fail(&self) {
-        match &self.inner {
+        match &*self.inner.lock().unwrap() {
             TrackerInner::Local(l) => l.finish_fail(),
-            TrackerInner::Remote(_) => todo!(),
+            TrackerInner::Remote(r) => r.finish_fail(),
         }
     }
 }
 
 pub enum TrackerInner {
     Local(PrettyTracker),
-    Remote(RemoteTracker)
+    Remote(RemoteTracker),
 }
 
 pub struct RemoteTracker {
-    writer: FramedWrite<tokio::io::Stdout, HpgCodec<HpgMessage>>,
+    bus: SyncBus<Stdin, Stdout>,
     runtime: tokio::runtime::Runtime,
-
 }
 
 impl RemoteTracker {
-    fn new() -> Self {
-        let stdout = tokio::io::stdout();
-        let encoder = HpgCodec::new();
-        let writer = FramedWrite::new(stdout, encoder);
-        let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+    fn new(bus: SyncBus<Stdin, Stdout>) -> Self {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        RemoteTracker { bus, runtime }
+    }
 
-        Self {
-            writer,
-            runtime
-        }
+    fn write(&self, msg: HpgMessage) {
+        self.runtime.block_on(async move {
+            Pin::new(&self.bus).tx(msg).await;
+        });
     }
 
     pub fn debug_println(&self, args: Arguments) {
-        let msg = HpgMessage::Debug(args.to_string());
-        let writer = self.writer.
-        self.runtime.block_on(async {
-            self.writer.send(msg).await;
-        })
+        self.write(HpgMessage::Debug(args.to_string()));
+    }
+
+    pub fn println(&self, args: Arguments) {
+        self.write(HpgMessage::ExecServer(ExecServerMessage::Println(
+            args.to_string(),
+        )));
+    }
+
+    pub fn indent_println(&self, indent: usize, args: Arguments) {
+        let s = args.to_string();
+        let indent_str = " ".repeat(indent * 2);
+        let mut lines = Vec::new();
+        for line in s.lines() {
+            lines.push(format!("{}{}", indent_str, line));
+        }
+
+        let output = lines.join("\n");
+        self.write(HpgMessage::ExecServer(ExecServerMessage::Println(output)));
+    }
+
+    pub fn task<S: Into<String>>(&self, msg: S) {
+        self.write(HpgMessage::ExecServer(ExecServerMessage::Event(
+            ServerEvent::TaskStart(msg.into()),
+        )));
+    }
+
+    pub fn run(&self, count: u64) {
+        self.write(HpgMessage::ExecServer(ExecServerMessage::Event(
+            ServerEvent::BatchStart(count),
+        )));
+    }
+
+    pub fn task_success(&self) {
+        self.write(HpgMessage::ExecServer(ExecServerMessage::Event(
+            ServerEvent::TaskSuccess,
+        )));
+    }
+
+    pub fn task_skip(&self) {
+        self.write(HpgMessage::ExecServer(ExecServerMessage::Event(
+            ServerEvent::TaskSkip,
+        )));
+    }
+
+    pub fn task_fail(&self) {
+        self.write(HpgMessage::ExecServer(ExecServerMessage::Event(
+            ServerEvent::TaskFail,
+        )));
+    }
+
+    pub fn finish_success(&self) {
+        self.write(HpgMessage::ExecServer(ExecServerMessage::Event(
+            ServerEvent::BatchSuccess,
+        )));
+    }
+
+    pub fn finish_fail(&self) {
+        self.write(HpgMessage::ExecServer(ExecServerMessage::Event(
+            ServerEvent::BatchFail,
+        )));
     }
 }
 
@@ -167,12 +224,11 @@ impl PrettyTracker {
     }
 
     pub fn debug_println(&self, args: Arguments) {
-            self.bars.suspend(|| {
-                self.console
-                    .write_line(&style(args.to_string()).yellow().dim().to_string())
-                    .unwrap();
-            });
-    
+        self.bars.suspend(|| {
+            self.console
+                .write_line(&style(args.to_string()).yellow().dim().to_string())
+                .unwrap();
+        });
     }
 
     pub fn println(&self, args: Arguments) {
