@@ -1,11 +1,13 @@
 use std::{
     fmt::Arguments,
+    fs::File,
+    io::Write,
     pin::Pin,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
-    time::{Duration, Instant}, fs::File, io::Write,
+    time::{Duration, Instant},
 };
 
 use console::{style, Term};
@@ -347,26 +349,6 @@ impl PrettyTracker {
     }
 }
 
-pub struct DebugLogger {
-    file: Mutex<File>,
-}
-
-impl DebugLogger {
-    pub fn new() -> DebugLogger {
-        let file = File::options().create(true).write(true).truncate(true).open("/tmp/hpg-error.log").unwrap();
-        DebugLogger { 
-            file: Mutex::new(file), 
-        }
-    }
-
-    pub fn write(&self, args: Arguments) {
-        let line = format!("{}\n", args.to_string());
-        let file = &mut *self.file.lock().unwrap();
-        file.write_all(line.as_bytes()).unwrap();
-    }
-}
-
 lazy_static! {
     pub static ref TRACKER: Tracker = Tracker::new_local();
-    pub static ref FILELOGGER: DebugLogger = DebugLogger::new();
 }

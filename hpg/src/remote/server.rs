@@ -1,6 +1,10 @@
 use std::{
-    fs::File,
+    fs::{File, Permissions},
     io::{BufReader, BufWriter, Write},
+    os::{
+        fd::{AsRawFd, FromRawFd, IntoRawFd},
+        unix::fs::PermissionsExt,
+    },
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -12,9 +16,13 @@ use super::{
         SyncServerMessage,
     },
 };
-use crate::{debug_file, error::HpgRemoteError, remote::comms::SyncBus, task::LuaState};
+use crate::{error::HpgRemoteError, remote::comms::SyncBus, task::LuaState};
 use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use librsync::whole;
+use nix::{
+    sys::stat::{fchmod, Mode},
+    unistd::{fchown, Gid, Uid},
+};
 use tokio::{
     fs::OpenOptions,
     io::{AsyncWriteExt, Stdin, Stdout},
@@ -26,26 +34,48 @@ use tokio_util::{
     codec::{Encoder, Framed, FramedRead, FramedWrite},
 };
 
+fn running_as_sudo() -> (bool, Uid, Gid) {
+    let current_uid = nix::unistd::getuid();
+    let current_gid = nix::unistd::getgid();
+    let is_root = current_uid.is_root();
+    if let Some(v) = std::env::var_os("SUDO_UID") {
+        let uid: u32 = v.to_string_lossy().parse().unwrap();
+        let sudo_uid = Uid::from(uid);
+        if current_uid != sudo_uid {
+            let gid: u32 = std::env::var("SUDO_GID").unwrap().parse().unwrap();
+            return (true, sudo_uid, Gid::from(gid));
+        } else {
+            return (false, current_uid, current_gid);
+        }
+    } else {
+        (is_root, current_uid, current_gid)
+    }
+}
+
 async fn listen_socket(socket_path: &Path, root_dir: &Path) -> Result<(), HpgRemoteError> {
     if socket_path.exists() {
         tokio::fs::remove_file(&socket_path).await?;
     }
     let listener = UnixListener::bind(socket_path)?;
-    println!("Listening on socket");
-    eprintln!("does this happen");
+    if let (true, uid, gid) = running_as_sudo() {
+        std::os::unix::fs::chown(&socket_path, Some(uid.as_raw()), Some(gid.as_raw())).unwrap();
+    }
+
     // should wait for client to connect
-    let res = listener.accept().await;
-    println!("accept: {:?}", res);
+    let res = match time::timeout(Duration::from_secs(5), listener.accept()).await {
+        Ok(r) => r,
+        Err(_e) => {
+            eprintln!("Timed out waiting for connection");
+            return Ok(());
+        }
+    };
     let (stream, _addr) = res?;
-    println!("Client connected");
     let mut rw = Framed::new(stream, HpgCodec::<HpgMessage>::new());
     match time::timeout(Duration::from_secs(5), rw.next()).await {
         Ok(Some(Ok(HpgMessage::SyncClient(SyncClientMessage::FileList(list))))) => {
-            println!("got filelist msg");
             let info = check_dir(&root_dir, &list)?;
             rw.send(HpgMessage::SyncServer(SyncServerMessage::FileStatus(info)))
                 .await?;
-            println!("sent response");
         }
         Ok(Some(Ok(m))) => {
             //out of sequence message
@@ -89,7 +119,6 @@ pub fn run_socket_server(
 }
 
 pub fn run_hpg_server(root_dir: String, lua: LuaState) {
-    debug_file!("start server");
     let root_path = PathBuf::from(root_dir);
     let mut encoder: HpgCodec<HpgMessage> = HpgCodec::new();
     if !root_path.exists() {
@@ -103,7 +132,6 @@ pub fn run_hpg_server(root_dir: String, lua: LuaState) {
         std::io::stdout().write_all(&bytes).unwrap();
         return;
     }
-    debug_file!("set workdir");
     let rt = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()

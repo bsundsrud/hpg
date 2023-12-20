@@ -5,6 +5,8 @@ use clap::Subcommand;
 use console::style;
 use error::HpgError;
 use error::HpgRemoteError;
+use nix::unistd::geteuid;
+use nix::unistd::getuid;
 use remote::comms::MessageBus;
 use remote::comms::SyncBus;
 use remote::config::InventoryConfig;
@@ -129,7 +131,7 @@ struct GlobalOpt {
 }
 
 #[derive(Debug, Parser)]
-struct HpgOpt {
+pub struct HpgOpt {
     #[arg(
         short,
         long,
@@ -215,7 +217,6 @@ fn run_hpg_local(opt: HpgOpt, lua: LuaState) -> Result<()> {
 }
 
 fn run_hpg() -> Result<()> {
-    debug_file!("Main start");
     let opt = Opt::parse();
     if opt.globals.lsp_defs {
         let path = std::path::PathBuf::from("./.meta");
@@ -278,10 +279,8 @@ fn run_hpg() -> Result<()> {
             Ok(())
         }
         Some(RemoteCommands::Server { root_dir }) => {
-            debug_file!("server command");
             let bus = SyncBus::new(tokio::io::stdin(), tokio::io::stdout());
             TRACKER.into_remote(bus);
-            debug_file!("call run_hpg_server");
             remote::server::run_socket_server(root_dir, lua, &PathBuf::from("/tmp/hpg.socket"))?;
             Ok(())
         }

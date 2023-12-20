@@ -1,6 +1,5 @@
 use super::{
     client,
-    codec::HpgCodec,
     config::InventoryConfig,
     messages::{FilePatch, PatchType, SyncClientMessage, SyncServerMessage},
 };
@@ -8,14 +7,12 @@ use crate::{
     error::HpgRemoteError,
     remote::{
         comms::SyncBus,
-        messages::{self, FileStatus, HpgMessage},
+        messages::{FileStatus, HpgMessage},
     },
     HpgOpt,
 };
 use async_trait::async_trait;
-use futures_util::{
-    future::join_all, stream::FuturesUnordered, Future, FutureExt, SinkExt, StreamExt,
-};
+use futures_util::Future;
 use librsync::whole;
 use russh::{
     client::{Handler, Msg},
@@ -25,16 +22,14 @@ use russh_keys::{key, load_secret_key};
 use std::{
     collections::HashSet,
     path::{Path, PathBuf},
-    sync::{atomic::AtomicBool, Arc},
+    sync::Arc,
     time::Duration,
 };
 use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncWriteExt},
-    join,
-    time::{sleep, timeout},
+    time::timeout,
 };
-use tokio_util::codec::{FramedRead, FramedWrite};
 
 #[derive(Debug, Clone)]
 pub struct HostInfo {
@@ -142,7 +137,8 @@ impl Session {
                 .await;
             match res {
                 Ok(c) => return Ok(c),
-                Err(_) => {
+                Err(e) => {
+                    eprintln!("{}", e);
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             }
@@ -155,13 +151,9 @@ impl Session {
         exe_path: &str,
     ) -> Result<impl Future<Output = Result<(), HpgRemoteError>>, HpgRemoteError> {
         let mut channel = self.session.channel_open_session().await?;
-        channel
-            .request_pty(false, "xterm", 80, 24, 0, 0, &[])
-            .await?;
-        let cmdline = format!("{} server {}", exe_path, remote_path);
+        let cmdline = format!("sudo {} server {}", exe_path, remote_path);
         eprintln!("Remote cmdline: {}", cmdline);
         channel.exec(true, cmdline).await?;
-        eprintln!("started remote");
         let block = async move {
             let mut stdout = tokio::io::stdout();
             let mut stderr = tokio::io::stderr();
@@ -197,7 +189,6 @@ impl Session {
         root_path: &Path,
         socket_path: String,
     ) -> Result<(), HpgRemoteError> {
-        eprintln!("Connecting to remote socket");
         let mut channel =
             match timeout(Duration::from_secs(5), self.wait_for_socket(socket_path)).await {
                 Ok(c) => c?,
@@ -207,16 +198,13 @@ impl Session {
                     ))
                 }
             };
-        eprintln!("connected to socket");
         {
             let writer = channel.make_writer();
             let reader = channel.make_reader();
             let bus = SyncBus::new(reader, writer);
             let bus = bus.pin();
             let local_files = client::find_hpg_files(&root_path)?;
-            eprintln!("found local files");
             bus.tx(SyncClientMessage::FileList(local_files)).await?;
-            eprintln!("Sent message");
             let msg = bus.rx().await?;
             eprintln!("msg back: {:?}", msg);
         }
