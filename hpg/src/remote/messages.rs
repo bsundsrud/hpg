@@ -13,25 +13,25 @@ pub struct LocalFile {
     pub rel_path: PathBuf,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FileInfo {
     pub rel_path: PathBuf,
     pub status: FileStatus,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum FileStatus {
     Present { sig: Vec<u8> },
     Absent,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FilePatch {
     pub rel_path: PathBuf,
     pub patch: PatchType,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum PatchType {
     Full { contents: Vec<u8> },
     Partial { delta: Vec<u8> },
@@ -72,33 +72,33 @@ Cancel   --->                       Cancel current server-side run and exit
 
 */
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum SyncClientMessage {
     FileList(Vec<LocalFile>),
     Patch(FilePatch),
     Close,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum SyncServerMessage {
     FileStatus(Vec<FileInfo>),
     PatchApplied(PathBuf),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ExecClientMessage {
     Exec,
     Cancel,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ExecServerMessage {
     Println(String),
     Event(ServerEvent),
     Finish,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ServerEvent {
     TaskStart(String),
     BatchStart(u64),
@@ -109,7 +109,7 @@ pub enum ServerEvent {
     BatchFail,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum HpgMessage {
     SyncClient(SyncClientMessage),
     SyncServer(SyncServerMessage),

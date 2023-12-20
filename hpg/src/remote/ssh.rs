@@ -1,11 +1,11 @@
 use super::{
     client,
     codec::HpgCodec,
-    messages::{FilePatch, PatchType, SyncClientMessage, SyncServerMessage},
+    messages::{FilePatch, PatchType, SyncClientMessage, SyncServerMessage}, config::InventoryConfig,
 };
 use crate::{
     error::HpgRemoteError,
-    remote::messages::{FileStatus, HpgMessage},
+    remote::{messages::{FileStatus, HpgMessage}, comms::SyncBus}, HpgOpt,
 };
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
@@ -40,6 +40,43 @@ impl Handler for Client {
     }
 }
 
+pub fn run_hpg_ssh(host: HostInfo, opt: HpgOpt, inventory: InventoryConfig) -> Result<(), HpgRemoteError> {
+    let host_config = inventory.config_for_host(&host.hostname);
+    let host = if let Some(c) = host_config {
+        HostInfo {
+            hostname: c.host.clone(),
+            port: c.port.or(host.port),
+            user: c.user.clone().or(host.user),
+        }
+    } else {
+        host
+    };
+    let root_dir = PathBuf::from(opt.config).canonicalize()?;
+    let root_dir = root_dir.parent().unwrap();
+    let remote_path = host_config.and_then(|hc| hc.remote_path.clone()).unwrap_or_else(|| {
+        format!(
+            "/tmp/hpg/{}",
+            root_dir
+                .file_name()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| "unknown".to_string())
+        )
+    });
+
+    let remote_exe = host_config.and_then(|hc| hc.remote_exe.clone()).unwrap_or_else(|| "/home/benn/bin/hpg".to_string());
+    
+    let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
+    runtime.block_on(async move {
+        let ssh_config = load_ssh_config(host, None, None)?;
+        let mut client = Session::connect(ssh_config).await?;
+        client
+            .sync_files(&root_dir, &remote_path, &remote_exe)
+            .await?;
+        client.close().await?;
+        Ok(())
+    })
+}
+
 pub struct Session {
     session: russh::client::Handle<Client>,
 }
@@ -69,25 +106,21 @@ impl Session {
         &mut self,
         root_path: &Path,
         remote_path: &str,
-        exe_path: Option<String>,
+        exe_path: &str,
     ) -> Result<(), HpgRemoteError> {
         let mut channel = self.session.channel_open_session().await?;
-        let exe_path = if let Some(ref s) = exe_path {
-            &s
-        } else {
-            "hpg"
-        };
+        channel.request_pty(false, "xterm", 80, 24, 0, 0, &[]).await?;
         let cmdline = format!("{} server {}", exe_path, remote_path);
         eprintln!("Remote cmdline: {}", cmdline);
         channel.exec(true, cmdline).await?;
         let local_files = client::find_hpg_files(&root_path)?;
-        let encoder: HpgCodec<HpgMessage> = HpgCodec::new();
-        let decoder: HpgCodec<HpgMessage> = HpgCodec::new();
-        let mut hpg_writer = FramedWrite::new(channel.make_writer(), encoder);
-        let mut hpg_reader = FramedRead::new(channel.make_reader(), decoder);
+        let writer = channel.make_writer();
+        let reader = channel.make_reader();
 
-        hpg_writer
-            .send(HpgMessage::SyncClient(SyncClientMessage::FileList(
+        let bus = SyncBus::new(reader, writer);
+        let bus = bus.pin();
+        bus
+            .tx(HpgMessage::SyncClient(SyncClientMessage::FileList(
                 local_files,
             )))
             .await?;
@@ -97,13 +130,13 @@ impl Session {
         loop {
             if patches.is_empty() && started {
                 eprintln!("Sending close");
-                hpg_writer
-                    .send(HpgMessage::SyncClient(SyncClientMessage::Close))
+                bus
+                    .tx(HpgMessage::SyncClient(SyncClientMessage::Close))
                     .await?;
                 break;
             }
-            match hpg_reader.next().await {
-                Some(Ok(response)) => {
+            match bus.rx().await? {
+                Some(response) => {
                     eprintln!("got response {:?}", response);
                     match response {
                         HpgMessage::SyncServer(SyncServerMessage::FileStatus(i)) => {
@@ -119,7 +152,7 @@ impl Session {
                                             rel_path: file.rel_path,
                                             patch: PatchType::Partial { delta },
                                         });
-                                        hpg_writer.send(HpgMessage::SyncClient(patch)).await?;
+                                        bus.tx(HpgMessage::SyncClient(patch)).await?;
                                     }
                                     FileStatus::Absent => {
                                         let contents =
@@ -129,7 +162,7 @@ impl Session {
                                             rel_path: file.rel_path,
                                             patch: PatchType::Full { contents },
                                         });
-                                        hpg_writer.send(HpgMessage::SyncClient(patch)).await?;
+                                        bus.tx(HpgMessage::SyncClient(patch)).await?;
                                     }
                                 }
                             }
@@ -153,11 +186,9 @@ impl Session {
                         }
                     }
                 }
-                Some(Err(e)) => {
-                    eprintln!("Got Error: {}", e);
-                    return Err(e);
-                }
-                None => continue,
+                None => {
+                    continue;
+                },
             }
         }
 

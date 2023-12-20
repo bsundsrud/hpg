@@ -12,7 +12,7 @@ use super::{
         SyncServerMessage,
     },
 };
-use crate::{error::HpgRemoteError, task::LuaState};
+use crate::{error::HpgRemoteError, task::LuaState, debug_file};
 use futures_util::{SinkExt, StreamExt};
 use librsync::whole;
 use tokio::{
@@ -26,9 +26,12 @@ use tokio_util::{
 };
 
 pub fn run_hpg_server(root_dir: String, lua: LuaState) {
+    debug_file!("start server");
     let root_path = PathBuf::from(root_dir);
     let mut encoder: HpgCodec<HpgMessage> = HpgCodec::new();
-
+    if !root_path.exists() {
+        std::fs::create_dir_all(&root_path).unwrap();
+    }
     if let Err(e) = std::env::set_current_dir(&root_path) {
         let mut bytes = BytesMut::new();
         encoder
@@ -37,7 +40,7 @@ pub fn run_hpg_server(root_dir: String, lua: LuaState) {
         std::io::stdout().write_all(&bytes).unwrap();
         return;
     }
-
+    debug_file!("set workdir");
     let rt = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -103,11 +106,9 @@ pub async fn start_remote_sync(
                 return Err(e);
             }
             Ok(None) => {
-                eprintln!("OK None");
-                break;
+                continue;
             }
             Err(_) => {
-                eprintln!("Errored");
                 break;
             }
         }
@@ -160,7 +161,6 @@ async fn handle_message(
         }
         SyncClientMessage::Close => return Ok(None),
     }
-    eprintln!("\nshould loop\n");
     Ok(Some(()))
 }
 

@@ -5,7 +5,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
-    time::{Duration, Instant},
+    time::{Duration, Instant}, fs::File, io::Write,
 };
 
 use console::{style, Term};
@@ -133,7 +133,7 @@ impl RemoteTracker {
 
     fn write(&self, msg: HpgMessage) {
         self.runtime.block_on(async move {
-            Pin::new(&self.bus).tx(msg).await;
+            Pin::new(&self.bus).tx(msg).await.unwrap();
         });
     }
 
@@ -347,6 +347,26 @@ impl PrettyTracker {
     }
 }
 
+pub struct DebugLogger {
+    file: Mutex<File>,
+}
+
+impl DebugLogger {
+    pub fn new() -> DebugLogger {
+        let file = File::options().create(true).write(true).truncate(true).open("/tmp/hpg-error.log").unwrap();
+        DebugLogger { 
+            file: Mutex::new(file), 
+        }
+    }
+
+    pub fn write(&self, args: Arguments) {
+        let line = format!("{}\n", args.to_string());
+        let file = &mut *self.file.lock().unwrap();
+        file.write_all(line.as_bytes()).unwrap();
+    }
+}
+
 lazy_static! {
     pub static ref TRACKER: Tracker = Tracker::new_local();
+    pub static ref FILELOGGER: DebugLogger = DebugLogger::new();
 }

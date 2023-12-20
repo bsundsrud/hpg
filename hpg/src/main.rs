@@ -7,6 +7,7 @@ use error::HpgError;
 use error::HpgRemoteError;
 use remote::comms::MessageBus;
 use remote::comms::SyncBus;
+use remote::config::InventoryConfig;
 use remote::server;
 use remote::ssh::HostInfo;
 use tracker::TRACKER;
@@ -92,6 +93,8 @@ enum RemoteCommands {
     },
     #[command(about = "Run HPG over SSH")]
     Ssh {
+        #[arg(short, long, name="INVENTORY", help="Path to inventory file")]
+        inventory: Option<String>,
         #[arg(
             name = "[USER@]HOST[:PORT]",
             help = "Remote host address",
@@ -182,6 +185,16 @@ fn parse_variables(opt: &HpgOpt) -> Result<Variables> {
     Ok(v)
 }
 
+fn try_inventory_files(paths: &[&str]) -> Result<InventoryConfig> {
+    for f in paths {
+        let p = PathBuf::from(f);
+        if p.exists() {
+            return Ok(InventoryConfig::load(p)?);
+        }
+    }
+    Ok(InventoryConfig::default())
+}
+
 fn run_hpg_local(opt: HpgOpt, lua: LuaState) -> Result<()> {
     let vars = parse_variables(&opt)?;
     let code = load_file(&opt.config)?;
@@ -201,6 +214,7 @@ fn run_hpg_local(opt: HpgOpt, lua: LuaState) -> Result<()> {
 }
 
 fn run_hpg() -> Result<()> {
+    debug_file!("Main start");
     let opt = Opt::parse();
     if opt.globals.lsp_defs {
         let path = std::path::PathBuf::from("./.meta");
@@ -244,13 +258,25 @@ fn run_hpg() -> Result<()> {
 
     match opt.cmd {
         Some(RemoteCommands::Local { hpg_opts }) => run_hpg_local(hpg_opts, lua),
-        Some(RemoteCommands::Ssh { host, hpg_opts }) => {
-            output!("SSH {:?}: {:?}", host, hpg_opts);
-            unimplemented!()
+        Some(RemoteCommands::Ssh { host, hpg_opts, inventory}) => {
+            let inventory = if let Some(p) = inventory {
+                try_inventory_files(&[&p])?
+            } else {
+                try_inventory_files(&[
+                    "inventory.yaml",
+                    "inventory.yml",
+                    "inventory.hjson",
+                    "inventory.json",
+                ])?
+            };
+            remote::ssh::run_hpg_ssh(host, hpg_opts, inventory)?;
+            Ok(())
         }
         Some(RemoteCommands::Server { root_dir }) => {
+            debug_file!("server command");
             let bus = SyncBus::new(tokio::io::stdin(), tokio::io::stdout());
             TRACKER.into_remote(bus);
+            debug_file!("call run_hpg_server");
             remote::server::run_hpg_server(root_dir, lua);
             Ok(())
         }

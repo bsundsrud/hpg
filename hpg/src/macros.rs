@@ -18,3 +18,10 @@ macro_rules! debug_output {
         $crate::tracker::TRACKER.debug_println(format_args!($($arg)+));
     });
 }
+
+#[macro_export]
+macro_rules! debug_file {
+    ($($arg:tt)+) => ({
+        $crate::tracker::FILELOGGER.write(format_args!($($arg)+));
+    });
+}
