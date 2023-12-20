@@ -117,6 +117,31 @@ pub enum HpgMessage {
     ExecServer(ExecServerMessage),
     Error(String),
     Debug(String),
+    Ping,
+}
+
+impl From<SyncClientMessage> for HpgMessage {
+    fn from(value: SyncClientMessage) -> Self {
+        HpgMessage::SyncClient(value)
+    }
+}
+
+impl From<SyncServerMessage> for HpgMessage {
+    fn from(value: SyncServerMessage) -> Self {
+        HpgMessage::SyncServer(value)
+    }
+}
+
+impl From<ExecClientMessage> for HpgMessage {
+    fn from(value: ExecClientMessage) -> Self {
+        HpgMessage::ExecClient(value)
+    }
+}
+
+impl From<ExecServerMessage> for HpgMessage {
+    fn from(value: ExecServerMessage) -> Self {
+        HpgMessage::ExecServer(value)
+    }
 }
 
 pub fn debug<S: Into<String>>(msg: S) -> HpgMessage {

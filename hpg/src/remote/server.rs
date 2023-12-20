@@ -12,18 +12,81 @@ use super::{
         SyncServerMessage,
     },
 };
-use crate::{error::HpgRemoteError, task::LuaState, debug_file};
-use futures_util::{SinkExt, StreamExt};
+use crate::{debug_file, error::HpgRemoteError, remote::comms::SyncBus, task::LuaState};
+use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use librsync::whole;
 use tokio::{
     fs::OpenOptions,
     io::{AsyncWriteExt, Stdin, Stdout},
+    net::UnixListener,
     time,
 };
 use tokio_util::{
     bytes::BytesMut,
-    codec::{Encoder, FramedRead, FramedWrite},
+    codec::{Encoder, Framed, FramedRead, FramedWrite},
 };
+
+async fn listen_socket(socket_path: &Path, root_dir: &Path) -> Result<(), HpgRemoteError> {
+    if socket_path.exists() {
+        tokio::fs::remove_file(&socket_path).await?;
+    }
+    let listener = UnixListener::bind(socket_path)?;
+    println!("Listening on socket");
+    eprintln!("does this happen");
+    // should wait for client to connect
+    let res = listener.accept().await;
+    println!("accept: {:?}", res);
+    let (stream, _addr) = res?;
+    println!("Client connected");
+    let mut rw = Framed::new(stream, HpgCodec::<HpgMessage>::new());
+    match time::timeout(Duration::from_secs(5), rw.next()).await {
+        Ok(Some(Ok(HpgMessage::SyncClient(SyncClientMessage::FileList(list))))) => {
+            println!("got filelist msg");
+            let info = check_dir(&root_dir, &list)?;
+            rw.send(HpgMessage::SyncServer(SyncServerMessage::FileStatus(info)))
+                .await?;
+            println!("sent response");
+        }
+        Ok(Some(Ok(m))) => {
+            //out of sequence message
+            println!("unknown message: {:?}", m);
+            return Ok(());
+        }
+        Ok(Some(Err(e))) => {
+            println!("error: {}", e);
+            return Err(e);
+        }
+        Ok(None) => {
+            // closed stream
+            println!("Stream closed");
+            return Ok(());
+        }
+        Err(_) => {
+            //timeout
+            println!("Timed out");
+            return Ok(());
+        }
+    }
+    println!("Exiting");
+    Ok(())
+}
+
+pub fn run_socket_server(
+    root_dir: String,
+    lua: LuaState,
+    socket_path: &Path,
+) -> Result<(), HpgRemoteError> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    rt.block_on(async move {
+        listen_socket(socket_path, &PathBuf::from(root_dir)).await?;
+        if socket_path.exists() {
+            tokio::fs::remove_file(&socket_path).await?;
+        }
+        Ok(())
+    })
+}
 
 pub fn run_hpg_server(root_dir: String, lua: LuaState) {
     debug_file!("start server");

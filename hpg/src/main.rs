@@ -14,6 +14,7 @@ use tracker::TRACKER;
 
 use std::collections::HashMap;
 use std::fs::File;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -93,7 +94,7 @@ enum RemoteCommands {
     },
     #[command(about = "Run HPG over SSH")]
     Ssh {
-        #[arg(short, long, name="INVENTORY", help="Path to inventory file")]
+        #[arg(short, long, name = "INVENTORY", help = "Path to inventory file")]
         inventory: Option<String>,
         #[arg(
             name = "[USER@]HOST[:PORT]",
@@ -258,7 +259,11 @@ fn run_hpg() -> Result<()> {
 
     match opt.cmd {
         Some(RemoteCommands::Local { hpg_opts }) => run_hpg_local(hpg_opts, lua),
-        Some(RemoteCommands::Ssh { host, hpg_opts, inventory}) => {
+        Some(RemoteCommands::Ssh {
+            host,
+            hpg_opts,
+            inventory,
+        }) => {
             let inventory = if let Some(p) = inventory {
                 try_inventory_files(&[&p])?
             } else {
@@ -277,7 +282,7 @@ fn run_hpg() -> Result<()> {
             let bus = SyncBus::new(tokio::io::stdin(), tokio::io::stdout());
             TRACKER.into_remote(bus);
             debug_file!("call run_hpg_server");
-            remote::server::run_hpg_server(root_dir, lua);
+            remote::server::run_socket_server(root_dir, lua, &PathBuf::from("/tmp/hpg.socket"))?;
             Ok(())
         }
         None => {

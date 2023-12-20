@@ -1,6 +1,9 @@
 use std::{
     pin::Pin,
-    sync::{Arc, Mutex, atomic::{AtomicU64, Ordering}},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
     time::Duration,
 };
 
@@ -10,14 +13,18 @@ use super::{codec::HpgCodec, messages::HpgMessage};
 use futures_util::{SinkExt, StreamExt};
 use pin_project::pin_project;
 use tokio::{
+    fs::File,
     io::{AsyncRead, AsyncWrite, AsyncWriteExt},
-    time, fs::File,
+    time,
 };
-use tokio_util::{codec::{FramedRead, FramedWrite, Encoder}, bytes::BytesMut};
+use tokio_util::{
+    bytes::BytesMut,
+    codec::{Encoder, FramedRead, FramedWrite},
+};
 
 #[pin_project]
 #[derive(Clone)]
-pub struct SyncBus<R: AsyncRead, W: AsyncWrite>(#[pin] Arc<Mutex<MessageBus<R, W>>>);
+pub struct SyncBus<R, W>(#[pin] Arc<Mutex<MessageBus<R, W>>>);
 
 impl<R, W> SyncBus<R, W>
 where
@@ -32,11 +39,11 @@ where
         Pin::new(self)
     }
 
-    pub async fn tx(self: Pin<&Self>, msg: HpgMessage) -> Result<(), HpgRemoteError> {
+    pub async fn tx<M: Into<HpgMessage>>(self: Pin<&Self>, msg: M) -> Result<(), HpgRemoteError> {
         let this = self.project_ref();
         let bus = &mut *this.0.lock().unwrap();
 
-        Pin::new(bus).tx(msg).await?;
+        Pin::new(bus).tx(msg.into()).await?;
         Ok(())
     }
 
@@ -66,12 +73,21 @@ where
         let reader = FramedRead::new(reader, HpgCodec::new());
         let writer = FramedWrite::new(writer, HpgCodec::new());
 
-        Self { reader, writer, id: AtomicU64::new(0) }
+        Self {
+            reader,
+            writer,
+            id: AtomicU64::new(0),
+        }
     }
 
     async fn write_file(&self, msg: &HpgMessage) {
         let id = self.id.fetch_add(1, Ordering::Relaxed);
-        let mut f = File::options().create(true).write(true).open(format!("hpg-{}.dat", id)).await.unwrap();
+        let mut f = File::options()
+            .create(true)
+            .write(true)
+            .open(format!("hpg-{}.dat", id))
+            .await
+            .unwrap();
         let mut codec: HpgCodec<HpgMessage> = HpgCodec::new();
         let mut bytes = BytesMut::new();
         codec.encode(msg.clone(), &mut bytes).unwrap();
