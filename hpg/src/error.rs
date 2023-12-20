@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{backtrace::Backtrace, sync::Arc};
 
 use thiserror::Error;
 
@@ -62,8 +62,11 @@ pub enum HpgRemoteError {
     ParseConfig(#[from] russh_config::Error),
     #[error("Could not parse SSH host address '{orig}': {reason}")]
     ParseHost { orig: String, reason: String },
-    #[error("I/O Error: {0}")]
-    IoError(#[from] std::io::Error),
+    #[error("I/O Error: {error}")]
+    IoError {
+        #[from]
+        error: std::io::Error,
+    },
     #[error("Ignore file error: {0}")]
     IgnoreError(#[from] ignore::Error),
     #[error("Error serializing client/server communications: {0}")]

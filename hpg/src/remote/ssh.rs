@@ -1,17 +1,22 @@
 use super::{
     client,
     config::InventoryConfig,
-    messages::{FilePatch, PatchType, SyncClientMessage, SyncServerMessage},
+    messages::{FileInfo, FilePatch, PatchType, SyncClientMessage, SyncServerMessage},
 };
 use crate::{
+    debug_output,
     error::HpgRemoteError,
+    output,
     remote::{
         comms::SyncBus,
         messages::{FileStatus, HpgMessage},
     },
+    task::LuaState,
+    tracker::TRACKER,
     HpgOpt,
 };
 use async_trait::async_trait;
+use bytes::{BufMut, BytesMut};
 use futures_util::Future;
 use librsync::whole;
 use russh::{
@@ -27,9 +32,10 @@ use std::{
 };
 use tokio::{
     fs::File,
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncWriteExt, BufReader},
     time::timeout,
 };
+use tokio_util::codec::{Decoder, FramedRead, LinesCodec};
 
 #[derive(Debug, Clone)]
 pub struct HostInfo {
@@ -65,7 +71,7 @@ pub fn run_hpg_ssh(
     } else {
         host
     };
-    let root_dir = PathBuf::from(opt.config).canonicalize()?;
+    let root_dir = PathBuf::from(&opt.config).canonicalize()?;
     let root_dir = root_dir.parent().unwrap();
     let remote_path = host_config
         .and_then(|hc| hc.remote_path.clone())
@@ -90,13 +96,9 @@ pub fn run_hpg_ssh(
     runtime.block_on(async move {
         let ssh_config = load_ssh_config(host, None, None)?;
         let client = Session::connect(ssh_config).await?;
-        // client
-        //     .sync_files(&root_dir, &remote_path, &remote_exe)
-        //     .await?;
         let process = client.start_remote(&remote_path, &remote_exe).await?;
-        let socket = client.connect_socket(&root_dir, "/tmp/hpg.socket".to_string());
+        let socket = client.connect_socket(&root_dir, "/tmp/hpg.socket".to_string(), opt);
         let handle = tokio::spawn(async move { process.await });
-        //sleep(Duration::from_secs(1)).await;
         socket.await?;
         handle.await.unwrap()?;
         client.close().await?;
@@ -138,7 +140,6 @@ impl Session {
             match res {
                 Ok(c) => return Ok(c),
                 Err(e) => {
-                    eprintln!("{}", e);
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             }
@@ -151,30 +152,30 @@ impl Session {
         exe_path: &str,
     ) -> Result<impl Future<Output = Result<(), HpgRemoteError>>, HpgRemoteError> {
         let mut channel = self.session.channel_open_session().await?;
-        let cmdline = format!("sudo {} server {}", exe_path, remote_path);
-        eprintln!("Remote cmdline: {}", cmdline);
+        let cmdline = format!("{} server {}", exe_path, remote_path);
+        debug_output!("Remote cmdline: {}", cmdline);
         channel.exec(true, cmdline).await?;
         let block = async move {
-            let mut stdout = tokio::io::stdout();
-            let mut stderr = tokio::io::stderr();
+            let mut codec = LinesCodec::new();
+            let mut stdout_buf = BytesMut::new();
+            let mut stderr_buf = BytesMut::new();
             loop {
                 match channel.wait().await {
                     Some(ChannelMsg::Data { ref data }) => {
-                        stdout.write_all(data).await?;
-                        stdout.flush().await?;
+                        stdout_buf.put(&**data);
+                        while let Some(line) = codec.decode(&mut stdout_buf).unwrap() {
+                            debug_output!("S: {}", line);
+                        }
                     }
                     Some(ChannelMsg::ExitStatus { exit_status }) => {
-                        let msg = format!("Exit: {}", exit_status);
-                        stdout.write_all(msg.as_bytes()).await?;
-                        stdout.flush().await?;
-                        channel.eof().await?;
+                        debug_output!("Remote process exited: {}", exit_status);
                         break;
                     }
                     Some(ChannelMsg::ExtendedData { ref data, ext }) => {
-                        let msg = format!("E{}: ", ext);
-                        stderr.write_all(msg.as_bytes()).await?;
-                        stderr.write_all(data).await?;
-                        stderr.flush().await?;
+                        stderr_buf.put(&**data);
+                        while let Some(line) = codec.decode(&mut stderr_buf).unwrap() {
+                            debug_output!("E: {}", line);
+                        }
                     }
                     _ => {}
                 }
@@ -188,6 +189,7 @@ impl Session {
         &self,
         root_path: &Path,
         socket_path: String,
+        opts: HpgOpt,
     ) -> Result<(), HpgRemoteError> {
         let mut channel =
             match timeout(Duration::from_secs(5), self.wait_for_socket(socket_path)).await {
@@ -198,110 +200,9 @@ impl Session {
                     ))
                 }
             };
-        {
-            let writer = channel.make_writer();
-            let reader = channel.make_reader();
-            let bus = SyncBus::new(reader, writer);
-            let bus = bus.pin();
-            let local_files = client::find_hpg_files(&root_path)?;
-            bus.tx(SyncClientMessage::FileList(local_files)).await?;
-            let msg = bus.rx().await?;
-            eprintln!("msg back: {:?}", msg);
-        }
+        sync_files(&mut channel, root_path).await?;
+        exec_hpg(&mut channel, root_path, opts).await?;
         channel.eof().await?;
-        Ok(())
-    }
-
-    pub async fn sync_files(
-        &mut self,
-        root_path: &Path,
-        remote_path: &str,
-        exe_path: &str,
-    ) -> Result<(), HpgRemoteError> {
-        let mut channel = self.session.channel_open_session().await?;
-        channel
-            .request_pty(false, "xterm", 80, 24, 0, 0, &[])
-            .await?;
-        let cmdline = format!("{} server {}", exe_path, remote_path);
-        eprintln!("Remote cmdline: {}", cmdline);
-        channel.exec(true, cmdline).await?;
-        let local_files = client::find_hpg_files(&root_path)?;
-        let writer = channel.make_writer();
-        let reader = channel.make_reader();
-
-        let bus = SyncBus::new(reader, writer);
-        let bus = bus.pin();
-        bus.tx(HpgMessage::SyncClient(SyncClientMessage::FileList(
-            local_files,
-        )))
-        .await?;
-        eprintln!("wrote data");
-        let mut patches: HashSet<PathBuf> = HashSet::new();
-        let mut started = false;
-        loop {
-            if patches.is_empty() && started {
-                eprintln!("Sending close");
-                bus.tx(HpgMessage::SyncClient(SyncClientMessage::Close))
-                    .await?;
-                break;
-            }
-            match bus.rx().await? {
-                Some(response) => {
-                    eprintln!("got response {:?}", response);
-                    match response {
-                        HpgMessage::SyncServer(SyncServerMessage::FileStatus(i)) => {
-                            for file in i {
-                                patches.insert(file.rel_path.clone());
-                                started = true;
-                                let full_path = root_path.join(&file.rel_path);
-                                match file.status {
-                                    FileStatus::Present { sig } => {
-                                        let delta = generate_delta(&full_path, &sig)?;
-                                        eprintln!("Calculated delta, {} bytes", delta.len());
-                                        let patch = SyncClientMessage::Patch(FilePatch {
-                                            rel_path: file.rel_path,
-                                            patch: PatchType::Partial { delta },
-                                        });
-                                        bus.tx(HpgMessage::SyncClient(patch)).await?;
-                                    }
-                                    FileStatus::Absent => {
-                                        let contents =
-                                            read_file_to_bytes(&root_path.join(&file.rel_path))
-                                                .await?;
-                                        let patch = SyncClientMessage::Patch(FilePatch {
-                                            rel_path: file.rel_path,
-                                            patch: PatchType::Full { contents },
-                                        });
-                                        bus.tx(HpgMessage::SyncClient(patch)).await?;
-                                    }
-                                }
-                            }
-                        }
-                        HpgMessage::Error(e) => {
-                            return Err(HpgRemoteError::Unknown(format!(
-                                "Error during sync: {}",
-                                e
-                            )));
-                        }
-                        HpgMessage::Debug(s) => {
-                            eprintln!("REMOTE: {}", s);
-                        }
-                        HpgMessage::SyncServer(SyncServerMessage::PatchApplied(p)) => {
-                            eprintln!("Applied patch to {:?}", p);
-                            patches.remove(&p);
-                        }
-                        _ => {
-                            // We don't handle other message types
-                            continue;
-                        }
-                    }
-                }
-                None => {
-                    continue;
-                }
-            }
-        }
-
         Ok(())
     }
 
@@ -310,6 +211,125 @@ impl Session {
             .disconnect(Disconnect::ByApplication, "", "English")
             .await?;
         Ok(())
+    }
+}
+
+async fn exec_hpg(
+    channel: &mut Channel<Msg>,
+    root_path: &Path,
+    opts: HpgOpt,
+) -> Result<(), HpgRemoteError> {
+    let writer = channel.make_writer();
+    let reader = channel.make_reader();
+    let bus = SyncBus::new(reader, writer);
+    let bus = bus.pin();
+
+    Ok(())
+}
+
+async fn sync_files(channel: &mut Channel<Msg>, root_path: &Path) -> Result<(), HpgRemoteError> {
+    let writer = channel.make_writer();
+    let reader = channel.make_reader();
+    let bus = SyncBus::new(reader, writer);
+    let bus = bus.pin();
+    let local_files = client::find_hpg_files(&root_path)?;
+    bus.tx(SyncClientMessage::FileList(local_files)).await?;
+    let msg = bus.rx().await?;
+    let mut patches = HashSet::new();
+    loop {
+        match msg {
+            Some(HpgMessage::SyncServer(SyncServerMessage::FileStatus(fi))) => {
+                for file in fi {
+                    let rel_path = file.rel_path.clone();
+                    let f = rel_path.to_string_lossy().to_string();
+                    debug_output!("Checking status of {}", f);
+                    if let Some(msg) = get_patch_data(root_path, file).await? {
+                        patches.insert(rel_path);
+                        debug_output!("Pushing patch for {}", f);
+                        bus.tx(msg).await?;
+                    }
+                }
+                break;
+            }
+            Some(HpgMessage::Debug(ref s)) => {
+                debug_output!("REMOTE: {}", s);
+            }
+            Some(HpgMessage::Error(ref e)) => {
+                output!("{}", e);
+            }
+            _ => {
+                return Err(HpgRemoteError::Unknown(
+                    "out-of-order execution: expected FileStatus".into(),
+                ));
+            }
+        };
+    }
+    TRACKER.start_progressbar(patches.len() as u64);
+    debug_output!("Outstanding patches: {:?}", patches);
+    loop {
+        if patches.is_empty() {
+            bus.tx(HpgMessage::SyncClient(SyncClientMessage::Close))
+                .await
+                .unwrap();
+            break;
+        }
+        match bus.rx().await? {
+            Some(HpgMessage::SyncServer(SyncServerMessage::PatchApplied(p))) => {
+                output!("Patched: {}", p.to_string_lossy());
+                patches.remove(&p);
+                TRACKER.progressbar_progress(format!("Applied: {}", &p.to_string_lossy()));
+                debug_output!("Patches left: {:?}", patches);
+            }
+            Some(HpgMessage::Debug(ref s)) => {
+                debug_output!("REMOTE: {}", s);
+            }
+            Some(HpgMessage::Error(ref e)) => {
+                output!("{}", e);
+            }
+            Some(_) => {
+                return Err(HpgRemoteError::Unknown(
+                    "out-of-order execution: expected PatchApplied".into(),
+                ))
+            }
+            None => return Err(HpgRemoteError::Unknown("Unexpected end of stream".into())),
+        }
+    }
+
+    TRACKER.progressbar_finish("Sync Complete".into());
+    Ok(())
+}
+
+async fn get_patch_data(
+    root_path: &Path,
+    file: FileInfo,
+) -> Result<Option<HpgMessage>, HpgRemoteError> {
+    let full_path = root_path.join(&file.rel_path);
+    match file.status {
+        FileStatus::Present { sig } => {
+            let local_sig = super::file_signature(&full_path)?;
+            if sig == local_sig {
+                debug_output!(
+                    "Signatures matched for {}",
+                    &file.rel_path.to_string_lossy()
+                );
+                return Ok(None);
+            }
+            let delta = generate_delta(&full_path, &sig)?;
+            let patch = SyncClientMessage::Patch(FilePatch {
+                rel_path: file.rel_path,
+                patch: PatchType::Partial { delta },
+            });
+
+            Ok(Some(HpgMessage::SyncClient(patch)))
+        }
+        FileStatus::Absent => {
+            let contents = read_file_to_bytes(&root_path.join(&file.rel_path)).await?;
+            let patch = SyncClientMessage::Patch(FilePatch {
+                rel_path: file.rel_path,
+                patch: PatchType::Full { contents },
+            });
+            Ok(Some(HpgMessage::SyncClient(patch)))
+        }
     }
 }
 

@@ -279,8 +279,6 @@ fn run_hpg() -> Result<()> {
             Ok(())
         }
         Some(RemoteCommands::Server { root_dir }) => {
-            let bus = SyncBus::new(tokio::io::stdin(), tokio::io::stdout());
-            TRACKER.into_remote(bus);
             remote::server::run_socket_server(root_dir, lua, &PathBuf::from("/tmp/hpg.socket"))?;
             Ok(())
         }
@@ -304,7 +302,9 @@ fn main() -> Result<()> {
                 error::TaskError::Template(t) => eprintln!("Error in template: {}", t),
                 error::TaskError::Dbus(d) => eprintln!("Dbus error: {}", d),
             },
-            HpgError::Remote(r) => eprintln!("Remote Error: {}", r),
+            HpgError::Remote(r) => {
+                eprintln!("Remote Error: {}", r);
+            }
             HpgError::File(f) => eprintln!("Error loading file: {}", f),
             HpgError::Parse(p) => eprintln!("Failed parsing: {}", p),
         }

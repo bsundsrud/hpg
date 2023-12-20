@@ -3,5 +3,4 @@ test_homedir = task("test_homedir", function()
     echo(v)
     local v2 = homedir("root")
     echo(v2)
-
 end)
