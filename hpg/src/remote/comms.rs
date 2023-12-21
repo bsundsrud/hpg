@@ -20,7 +20,7 @@ use tokio_util::{
 
 #[pin_project]
 #[derive(Clone)]
-pub struct SyncBus<R, W>(#[pin] Arc<Mutex<MessageBus<R, W>>>);
+pub struct SyncBus<R, W>(#[pin] Arc<Mutex<Option<MessageBus<R, W>>>>);
 
 impl<R, W> SyncBus<R, W>
 where
@@ -28,7 +28,7 @@ where
     W: AsyncWrite + Unpin,
 {
     pub fn new(reader: R, writer: W) -> SyncBus<R, W> {
-        SyncBus(Arc::new(Mutex::new(MessageBus::new(reader, writer))))
+        SyncBus(Arc::new(Mutex::new(Some(MessageBus::new(reader, writer)))))
     }
 
     pub fn pin(&self) -> Pin<&Self> {
@@ -37,17 +37,24 @@ where
 
     pub async fn tx<M: Into<HpgMessage>>(self: Pin<&Self>, msg: M) -> Result<(), HpgRemoteError> {
         let this = self.project_ref();
-        let bus = &mut *this.0.lock().unwrap();
-
-        Pin::new(bus).tx(msg.into()).await?;
+        let mut l = this.0.lock().unwrap();
+        let bus = l.as_mut().unwrap();
+        let pin = Pin::new(bus);
+        pin.tx(msg.into()).await?;
         Ok(())
     }
 
     pub async fn rx(self: Pin<&Self>) -> Result<Option<HpgMessage>, HpgRemoteError> {
         let this = self.project_ref();
-        let bus = &mut *this.0.lock().unwrap();
-
+        let mut l = this.0.lock().unwrap();
+        let bus = l.as_mut().unwrap();
         Ok(Pin::new(bus).rx().await?)
+    }
+
+    pub fn into_parts(self) -> (FramedWrite<W, HpgCodec<HpgMessage>>, FramedRead<R, HpgCodec<HpgMessage>>) {
+        let s = self.0.clone();
+        let r = s.lock().unwrap().take().unwrap();
+        r.into_parts()
     }
 }
 
@@ -108,5 +115,9 @@ where
                 return Err(HpgRemoteError::Unknown("Timed out".to_string()));
             }
         }
+    }
+
+    pub fn into_parts(self) -> (FramedWrite<W, HpgCodec<HpgMessage>>, FramedRead<R, HpgCodec<HpgMessage>>) {
+        (self.writer, self.reader)
     }
 }

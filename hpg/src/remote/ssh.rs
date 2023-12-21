@@ -1,7 +1,7 @@
 use super::{
     client,
-    config::InventoryConfig,
-    messages::{FileInfo, FilePatch, PatchType, SyncClientMessage, SyncServerMessage},
+    config::{HostConfig, InventoryConfig},
+    messages::{FileInfo, FilePatch, PatchType, SyncClientMessage, SyncServerMessage, ExecServerMessage, ServerEvent},
 };
 use crate::{
     debug_output,
@@ -11,8 +11,8 @@ use crate::{
         comms::SyncBus,
         messages::{FileStatus, HpgMessage},
     },
-    task::LuaState,
-    tracker::TRACKER,
+    task::{LuaState, Variables},
+    tracker::{TRACKER, Tracker, self},
     HpgOpt,
 };
 use async_trait::async_trait;
@@ -24,8 +24,9 @@ use russh::{
     Channel, ChannelMsg, Disconnect,
 };
 use russh_keys::{key, load_secret_key};
+use serde::de::VariantAccess;
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -56,9 +57,41 @@ impl Handler for Client {
     }
 }
 
+/**
+ * Merge all sources of variables.
+ *
+ * Order of precedence (lowest to highest)
+ *   - inventory global files
+ *   - inventory global inline vars
+ *   - host-specific files
+ *   - host-specific inline vars
+ *   - variable files on the command line
+ *   - variables on the command line
+ */
+fn merge_vars(
+    cmdline_vars: Variables,
+    host_config: &Option<&HostConfig>,
+    inventory: &InventoryConfig,
+) -> Result<Variables, HpgRemoteError> {
+    let mut vars = Variables::default();
+    for f in inventory.vars_files.iter() {
+        vars = vars.merge(Variables::from_file(&f)?)?;
+    }
+    vars = vars.merge(Variables::from_map(&inventory.vars)?)?;
+    if let Some(v) = host_config {
+        for f in v.vars_files.iter() {
+            vars = vars.merge(Variables::from_file(&f)?)?;
+        }
+        vars = vars.merge(Variables::from_map(&v.vars)?)?;
+    }
+    vars = vars.merge(cmdline_vars)?;
+    Ok(vars)
+}
+
 pub fn run_hpg_ssh(
     host: HostInfo,
     opt: HpgOpt,
+    vars: Variables,
     inventory: InventoryConfig,
 ) -> Result<(), HpgRemoteError> {
     let host_config = inventory.config_for_host(&host.hostname);
@@ -89,6 +122,8 @@ pub fn run_hpg_ssh(
         .and_then(|hc| hc.remote_exe.clone())
         .unwrap_or_else(|| "/home/benn/bin/hpg".to_string());
 
+    let vars = merge_vars(vars, &host_config, &inventory)?;
+
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
@@ -97,7 +132,7 @@ pub fn run_hpg_ssh(
         let ssh_config = load_ssh_config(host, None, None)?;
         let client = Session::connect(ssh_config).await?;
         let process = client.start_remote(&remote_path, &remote_exe).await?;
-        let socket = client.connect_socket(&root_dir, "/tmp/hpg.socket".to_string(), opt);
+        let socket = client.connect_socket(&root_dir, "/tmp/hpg.socket".to_string(), opt, vars);
         let handle = tokio::spawn(async move { process.await });
         socket.await?;
         handle.await.unwrap()?;
@@ -190,6 +225,7 @@ impl Session {
         root_path: &Path,
         socket_path: String,
         opts: HpgOpt,
+        vars: Variables,
     ) -> Result<(), HpgRemoteError> {
         let mut channel =
             match timeout(Duration::from_secs(5), self.wait_for_socket(socket_path)).await {
@@ -201,7 +237,7 @@ impl Session {
                 }
             };
         sync_files(&mut channel, root_path).await?;
-        exec_hpg(&mut channel, root_path, opts).await?;
+        exec_hpg(&mut channel, opts, vars).await?;
         channel.eof().await?;
         Ok(())
     }
@@ -216,13 +252,45 @@ impl Session {
 
 async fn exec_hpg(
     channel: &mut Channel<Msg>,
-    root_path: &Path,
     opts: HpgOpt,
+    vars: Variables,
 ) -> Result<(), HpgRemoteError> {
     let writer = channel.make_writer();
     let reader = channel.make_reader();
     let bus = SyncBus::new(reader, writer);
     let bus = bus.pin();
+
+    let msg = HpgMessage::ExecClient {
+        vars,
+        config: opts.config,
+        run_defaults: opts.run_defaults,
+        show_plan: opts.show,
+        targets: opts.targets,
+    };
+    bus.tx(msg).await?;
+
+    loop {
+        match bus.rx().await? {
+            Some(HpgMessage::ExecServer(ExecServerMessage::Event(e))) => {
+                match e {
+                    ServerEvent::TaskStart(t) =>tracker::global().task(t),
+                    ServerEvent::BatchStart(b) => tracker::global().run(b),
+                    ServerEvent::TaskSuccess => tracker::global().task_success(),
+                    ServerEvent::TaskSkip => tracker::global().task_skip(),
+                    ServerEvent::TaskFail => tracker::global().task_fail(),
+                    ServerEvent::BatchSuccess => tracker::global().finish_success(),
+                    ServerEvent::BatchFail => tracker::global().finish_fail(),
+                }
+            },
+            Some(HpgMessage::ExecServer(ExecServerMessage::Finish)) => break,
+            Some(_) => {
+                return Err(HpgRemoteError::Unknown(
+                    "out-of-order execution: expected FileStatus".into(),
+                ));
+            }
+            None => break,
+        }
+    }
 
     Ok(())
 }
@@ -264,7 +332,7 @@ async fn sync_files(channel: &mut Channel<Msg>, root_path: &Path) -> Result<(), 
             }
         };
     }
-    TRACKER.start_progressbar(patches.len() as u64);
+    tracker::global().progressbar(patches.len());
     debug_output!("Outstanding patches: {:?}", patches);
     loop {
         if patches.is_empty() {
@@ -277,7 +345,7 @@ async fn sync_files(channel: &mut Channel<Msg>, root_path: &Path) -> Result<(), 
             Some(HpgMessage::SyncServer(SyncServerMessage::PatchApplied(p))) => {
                 output!("Patched: {}", p.to_string_lossy());
                 patches.remove(&p);
-                TRACKER.progressbar_progress(format!("Applied: {}", &p.to_string_lossy()));
+                tracker::global().progressbar_progress(format!("Applied: {}", &p.to_string_lossy()));
                 debug_output!("Patches left: {:?}", patches);
             }
             Some(HpgMessage::Debug(ref s)) => {
@@ -295,7 +363,7 @@ async fn sync_files(channel: &mut Channel<Msg>, root_path: &Path) -> Result<(), 
         }
     }
 
-    TRACKER.progressbar_finish("Sync Complete".into());
+    tracker::global().progressbar_finish("Sync Complete".into());
     Ok(())
 }
 

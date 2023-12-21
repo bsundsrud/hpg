@@ -1,3 +1,6 @@
+use std::{collections::HashMap, path::Path};
+
+use anyhow::{Context, anyhow};
 use mlua::{Lua, MetaMethod, UserData, Value};
 use serde::{Deserialize, Serialize};
 
@@ -14,6 +17,18 @@ pub struct Variables {
 impl Variables {
     pub fn from_json(json: serde_json::Value) -> Variables {
         Variables { raw: json }
+    }
+
+    pub fn from_map(map: &HashMap<String, String>) -> Result<Variables, serde_json::Error> {
+        let json = serde_json::to_value(&map)?;
+        Ok(Variables::from_json(json))
+    }
+
+    pub fn from_file(f: &str) -> Result<Variables, anyhow::Error> {
+        let s = crate::load_file(&f)?;
+        let json = serde_json::from_str(&s)
+            .with_context(|| format!("File: {}", f))?;
+        Ok(Variables::from_json(json))
     }
 
     fn get_from_raw(&self, key: &str) -> Result<Option<&serde_json::Value>, mlua::Error> {
@@ -59,16 +74,22 @@ impl Variables {
         Ok(())
     }
 
-    pub fn merge(self, other: Variables) -> Result<Variables, HpgError> {
+    pub fn merge(self, other: Variables) -> Result<Variables, anyhow::Error> {
         let raw = merge_objects(self.raw, other.raw)?;
         Ok(Variables::from_json(raw))
+    }
+}
+
+impl Default for Variables {
+    fn default() -> Self {
+        Self { raw: serde_json::Value::Object(serde_json::Map::new()) }
     }
 }
 
 fn merge_objects(
     left: serde_json::Value,
     right: serde_json::Value,
-) -> Result<serde_json::Value, HpgError> {
+) -> Result<serde_json::Value, anyhow::Error> {
     use serde_json::Value;
 
     match (left, right) {
@@ -77,9 +98,7 @@ fn merge_objects(
             Ok(Value::Object(left))
         }
         _ => {
-            return Err(HpgError::Parse(
-                "Only JSON Objects can be merged".to_string(),
-            ));
+            return Err(anyhow!("Only JSON Objects can be merged"));
         }
     }
 }

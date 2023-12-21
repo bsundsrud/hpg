@@ -96,7 +96,7 @@ pub enum ExecServerMessage {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ServerEvent {
     TaskStart(String),
-    BatchStart(u64),
+    BatchStart(usize),
     TaskSuccess,
     TaskSkip,
     TaskFail,

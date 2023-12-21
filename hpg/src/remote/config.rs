@@ -8,6 +8,7 @@ use crate::{error::HpgRemoteError, Result};
 pub struct InventoryConfig {
     pub hosts: HashMap<String, HostConfig>,
     pub vars: HashMap<String, String>,
+    pub vars_files: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]

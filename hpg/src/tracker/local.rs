@@ -1,15 +1,16 @@
 use std::{
-    fmt::Arguments,
+    fmt::{Arguments, Debug},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Mutex,
+        Mutex, Once, OnceLock,
     },
     time::{Duration, Instant},
 };
 
 use console::{style, Term};
 use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressStyle};
-use lazy_static::lazy_static;
+
+use super::Tracker;
 
 pub struct PrettyTracker {
     console: Term,
@@ -21,7 +22,7 @@ pub struct PrettyTracker {
 }
 
 impl PrettyTracker {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let bars = MultiProgress::new();
         bars.set_alignment(indicatif::MultiProgressAlignment::Top);
         Self {
@@ -33,12 +34,14 @@ impl PrettyTracker {
             debug: AtomicBool::new(false),
         }
     }
+}
 
-    pub fn set_debug(&self, debug: bool) {
+impl Tracker for PrettyTracker {
+    fn set_debug(&self, debug: bool) {
         self.debug.store(debug, Ordering::SeqCst)
     }
 
-    pub fn debug_println(&self, args: Arguments) {
+    fn debug_println(&self, args: Arguments) {
         if self.debug.load(Ordering::Relaxed) {
             self.bars.suspend(|| {
                 self.console
@@ -48,13 +51,13 @@ impl PrettyTracker {
         }
     }
 
-    pub fn println(&self, args: Arguments) {
+    fn println(&self, args: Arguments) {
         self.bars.suspend(|| {
             self.console.write_line(&args.to_string()).unwrap();
         });
     }
 
-    pub fn indent_println(&self, indent: usize, args: Arguments) {
+    fn indent_println(&self, indent: usize, args: Arguments) {
         let s = args.to_string();
         let indent_str = " ".repeat(indent * 2);
         let mut lines = Vec::new();
@@ -67,18 +70,17 @@ impl PrettyTracker {
             .suspend(|| self.console.write_line(&output).unwrap());
     }
 
-    pub fn task<S: Into<String>>(&self, msg: S) {
-        let m = msg.into();
-        *self.current_task.lock().unwrap() = Some(m.clone());
+    fn task(&self, msg: String) {
+        *self.current_task.lock().unwrap() = Some(msg.clone());
         if let Some(rb) = &*self.run_bar.lock().unwrap() {
-            rb.set_message(m);
+            rb.set_message(msg);
         }
     }
 
-    pub fn start_progressbar(&self, count: u64) {
+    fn progressbar(&self, count: usize) {
         let mut rb = self.run_bar.lock().unwrap();
         if rb.is_none() {
-            let bar = ProgressBar::new(count).with_style(
+            let bar = ProgressBar::new(count as u64).with_style(
                 ProgressStyle::with_template("[{pos}/{len}] ({elapsed}) {spinner} {msg}").unwrap(),
             );
 
@@ -89,23 +91,23 @@ impl PrettyTracker {
         *self.started.lock().unwrap() = Some(Instant::now());
     }
 
-    pub fn progressbar_progress(&self, msg: String) {
+    fn progressbar_progress(&self, msg: String) {
         if let Some(rb) = &*self.run_bar.lock().unwrap() {
             rb.set_message(msg);
             rb.inc(1);
         }
     }
 
-    pub fn progressbar_finish(&self, msg: String) {
+    fn progressbar_finish(&self, msg: String) {
         if let Some(rb) = &*self.run_bar.lock().unwrap() {
             rb.finish_with_message(msg);
         }
     }
 
-    pub fn run(&self, count: u64) {
+    fn run(&self, count: usize) {
         let mut rb = self.run_bar.lock().unwrap();
         if rb.is_none() {
-            let bar = ProgressBar::new(count).with_style(
+            let bar = ProgressBar::new(count as u64).with_style(
                 ProgressStyle::with_template("[{pos}/{len}] ({elapsed}) {spinner} {msg}").unwrap(),
             );
 
@@ -116,7 +118,7 @@ impl PrettyTracker {
         *self.started.lock().unwrap() = Some(Instant::now());
     }
 
-    pub fn task_success(&self) {
+    fn task_success(&self) {
         let mut task = self.current_task.lock().unwrap();
         if let Some(t) = &*task {
             let _ = self
@@ -129,7 +131,7 @@ impl PrettyTracker {
         }
     }
 
-    pub fn task_skip(&self) {
+    fn task_skip(&self) {
         let mut task = self.current_task.lock().unwrap();
         if let Some(t) = &*task {
             let _ = self
@@ -142,7 +144,7 @@ impl PrettyTracker {
         }
     }
 
-    pub fn task_fail(&self) {
+    fn task_fail(&self) {
         let mut task = self.current_task.lock().unwrap();
         if let Some(t) = &*task {
             let _ = self
@@ -155,7 +157,7 @@ impl PrettyTracker {
         }
     }
 
-    pub fn finish_success(&self) {
+    fn finish_success(&self) {
         let msg = if let Some(started) = &*self.started.lock().unwrap() {
             format!(
                 "{} Done in {}.",
@@ -171,7 +173,7 @@ impl PrettyTracker {
         }
     }
 
-    pub fn finish_fail(&self) {
+    fn finish_fail(&self) {
         let msg = if let Some(started) = &*self.started.lock().unwrap() {
             format!(
                 "{} One or more tasks failed or were skipped. Done in {}.",
@@ -189,8 +191,4 @@ impl PrettyTracker {
             println!("{}", msg);
         }
     }
-}
-
-lazy_static! {
-    pub static ref TRACKER: PrettyTracker = PrettyTracker::new();
 }

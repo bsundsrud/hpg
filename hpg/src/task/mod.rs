@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::{debug_output, indent_output, output, tracker::TRACKER, Result};
+use crate::{debug_output, indent_output, output, tracker::{TRACKER, Tracker, self}, Result};
 use anyhow::anyhow;
 use console::style;
 use mlua::{self, FromLua, Function, Lua, LuaOptions, Table, UserData, Value, Variadic};
@@ -359,11 +359,11 @@ impl EvaluatedLuaState {
 
         let mut task_results: HashMap<TaskHandle, TaskResult> = HashMap::new();
         let task_table: Table = self.lua.named_registry_value("tasks")?;
-        TRACKER.run(ordering.len() as u64);
+        tracker::global().run(ordering.len());
         output!("{}", style("Execution").cyan());
         for task in ordering {
             let t = self.registry.task_for_handle(task);
-            TRACKER.task(t.description.clone());
+            tracker::global().task(t.description.clone());
             let mut parent_failed = false;
 
             // Did all our parents run successfully?
@@ -372,7 +372,7 @@ impl EvaluatedLuaState {
                 match task_results.get(&parent).unwrap() {
                     TaskResult::Success => {}
                     TaskResult::Incomplete(_) => {
-                        TRACKER.task_skip();
+                        tracker::global().task_skip();
                         parent_failed = true;
                         break;
                     }
@@ -391,7 +391,7 @@ impl EvaluatedLuaState {
                         if ud.is::<TaskResult>() {
                             let tr: &TaskResult = &ud.borrow().unwrap();
                             if let TaskResult::Incomplete(_) = tr {
-                                TRACKER.task_skip();
+                                tracker::global().task_skip();
                             }
                             task_results.insert(task, tr.clone());
                         } else {
@@ -399,7 +399,7 @@ impl EvaluatedLuaState {
                         }
                     }
                     Ok(_) => {
-                        TRACKER.task_success();
+                        tracker::global().task_success();
                         task_results.insert(task, TaskResult::Success);
                     }
                     Err(mlua::Error::CallbackError { traceback, cause }) => {
@@ -409,7 +409,7 @@ impl EvaluatedLuaState {
                         } else {
                             output!("{}\n{}", cause, traceback);
                         }
-                        TRACKER.task_fail();
+                        tracker::global().task_fail();
                         task_results
                             .insert(task, TaskResult::Incomplete(Some("Error".to_string())));
                         break;
@@ -421,10 +421,10 @@ impl EvaluatedLuaState {
             }
         }
         if task_results.into_values().any(|r| r.incomplete()) {
-            TRACKER.finish_fail();
+            tracker::global().finish_fail();
             return Err(TaskError::SkippedTask);
         }
-        TRACKER.finish_success();
+        tracker::global().finish_success();
         Ok(())
     }
 }

@@ -34,6 +34,10 @@ pub enum HpgError {
     File(#[from] std::io::Error),
     #[error("Parse Error: {0}")]
     Parse(String),
+    #[error("Serialization Error: {0}")]
+    Serde(#[from] serde_json::Error),
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
 }
 
 pub(crate) fn action_error<S: Into<String>>(msg: S) -> mlua::Error {
@@ -83,4 +87,6 @@ pub enum HpgRemoteError {
     RsyncError(#[from] librsync::Error),
     #[error("Unknown Error: {0}")]
     Unknown(String),
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
 }
