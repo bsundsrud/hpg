@@ -5,21 +5,15 @@ use clap::Subcommand;
 use console::style;
 use error::HpgError;
 use error::HpgRemoteError;
-use nix::unistd::geteuid;
-use nix::unistd::getuid;
-use remote::comms::MessageBus;
-use remote::comms::SyncBus;
+
 use remote::config::InventoryConfig;
-use remote::server;
 use remote::ssh::HostInfo;
 use tracker::TRACKER;
 
 use std::collections::HashMap;
 use std::fs::File;
-use std::path::Path;
+
 use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::Mutex;
 
 use task::LuaState;
 use task::Variables;

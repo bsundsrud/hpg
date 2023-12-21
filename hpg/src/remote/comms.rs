@@ -1,9 +1,6 @@
 use std::{
     pin::Pin,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
-    },
+    sync::{atomic::AtomicU64, Arc, Mutex},
     time::Duration,
 };
 
@@ -13,8 +10,7 @@ use super::{codec::HpgCodec, messages::HpgMessage};
 use futures_util::{SinkExt, StreamExt};
 use pin_project::pin_project;
 use tokio::{
-    fs::File,
-    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
+    io::{AsyncRead, AsyncWrite},
     time,
 };
 use tokio_util::{
@@ -81,17 +77,9 @@ where
     }
 
     async fn write_file(&self, msg: &HpgMessage) {
-        let id = self.id.fetch_add(1, Ordering::Relaxed);
-        let mut f = File::options()
-            .create(true)
-            .write(true)
-            .open(format!("hpg-{}.dat", id))
-            .await
-            .unwrap();
         let mut codec: HpgCodec<HpgMessage> = HpgCodec::new();
         let mut bytes = BytesMut::new();
         codec.encode(msg.clone(), &mut bytes).unwrap();
-        f.write_all(&bytes).await.unwrap();
     }
 
     pub async fn tx(self: Pin<&mut Self>, msg: HpgMessage) -> Result<(), HpgRemoteError> {

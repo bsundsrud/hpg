@@ -15,7 +15,12 @@ use crate::{error::HpgRemoteError, task::LuaState};
 use futures_util::{SinkExt, StreamExt};
 use librsync::whole;
 use nix::unistd::{Gid, Uid};
-use tokio::{fs::OpenOptions, io::AsyncWriteExt, net::UnixListener, time};
+use tokio::{
+    fs::OpenOptions,
+    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
+    net::UnixListener,
+    time,
+};
 use tokio_util::codec::Framed;
 
 fn running_as_sudo() -> (bool, Uid, Gid) {
@@ -34,6 +39,28 @@ fn running_as_sudo() -> (bool, Uid, Gid) {
     } else {
         (is_root, current_uid, current_gid)
     }
+}
+
+pub fn run_socket_server(
+    root_dir: String,
+    lua: LuaState,
+    socket_path: &Path,
+) -> Result<(), HpgRemoteError> {
+    let root_dir = PathBuf::from(root_dir);
+    if !root_dir.exists() {
+        std::fs::create_dir_all(&root_dir)?;
+    }
+    std::env::set_current_dir(&root_dir)?;
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    rt.block_on(async move {
+        listen_socket(socket_path, &root_dir, lua).await?;
+        if socket_path.exists() {
+            tokio::fs::remove_file(&socket_path).await?;
+        }
+        Ok(())
+    })
 }
 
 async fn listen_socket(
@@ -59,6 +86,19 @@ async fn listen_socket(
     };
     let (stream, _addr) = res?;
     let mut rw = Framed::new(stream, HpgCodec::<HpgMessage>::new());
+    server_sync(root_dir, &mut rw).await?;
+
+    eprintln!("SERVER: sync done");
+
+    server_exec_hpg(root_dir, lua, &mut rw).await?;
+    // moving to execution mode now
+    Ok(())
+}
+
+async fn server_sync<R: AsyncRead + AsyncWrite + Unpin>(
+    root_dir: &Path,
+    rw: &mut Framed<R, HpgCodec<HpgMessage>>,
+) -> Result<(), HpgRemoteError> {
     loop {
         let msg = match time::timeout(Duration::from_secs(50), rw.next()).await {
             Ok(m) => m,
@@ -108,31 +148,15 @@ async fn listen_socket(
             _ => continue,
         }
     }
-    eprintln!("SERVER: sync done");
-    // moving to execution mode now
     Ok(())
 }
 
-pub fn run_socket_server(
-    root_dir: String,
+async fn server_exec_hpg<T: AsyncRead + AsyncWrite + Unpin>(
+    root_dir: &Path,
     lua: LuaState,
-    socket_path: &Path,
+    rw: &mut Framed<T, HpgCodec<HpgMessage>>,
 ) -> Result<(), HpgRemoteError> {
-    let root_dir = PathBuf::from(root_dir);
-    if !root_dir.exists() {
-        std::fs::create_dir_all(&root_dir)?;
-    }
-    std::env::set_current_dir(&root_dir)?;
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()?;
-    rt.block_on(async move {
-        listen_socket(socket_path, &root_dir, lua).await?;
-        if socket_path.exists() {
-            tokio::fs::remove_file(&socket_path).await?;
-        }
-        Ok(())
-    })
+    todo!()
 }
 
 fn apply_patch(path: &Path, patch: &[u8]) -> Result<(), HpgRemoteError> {
