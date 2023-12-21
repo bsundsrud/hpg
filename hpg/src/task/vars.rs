@@ -1,11 +1,12 @@
 use mlua::{Lua, MetaMethod, UserData, Value};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     actions::util,
     error::{self, HpgError},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Variables {
     raw: serde_json::Value,
 }

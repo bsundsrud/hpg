@@ -156,6 +156,37 @@ async fn server_exec_hpg<T: AsyncRead + AsyncWrite + Unpin>(
     lua: LuaState,
     rw: &mut Framed<T, HpgCodec<HpgMessage>>,
 ) -> Result<(), HpgRemoteError> {
+    loop {
+        let msg = match time::timeout(Duration::from_secs(50), rw.next()).await {
+            Ok(m) => m,
+            Err(_e) => {
+                eprintln!("SERVER: Timed out");
+                break;
+            }
+        };
+        let msg = if let Some(m) = msg {
+            m
+        } else {
+            eprintln!("SERVER: Stream closed");
+            break;
+        };
+        let msg = msg?;
+        match msg {
+            HpgMessage::ExecClient {
+                vars,
+                config,
+                run_defaults,
+                show_plan,
+                targets,
+            } => {
+                println!(
+                    "{:?} {} {} {} {:?}",
+                    vars, config, run_defaults, show_plan, targets
+                );
+            }
+            _ => continue,
+        }
+    }
     todo!()
 }
 

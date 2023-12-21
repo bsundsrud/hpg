@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use crate::task::Variables;
+
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Copy)]
 pub enum FileType {
     Dir,
@@ -86,14 +88,7 @@ pub enum SyncServerMessage {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum ExecClientMessage {
-    Exec,
-    Cancel,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum ExecServerMessage {
-    Println(String),
     Event(ServerEvent),
     Finish,
 }
@@ -113,11 +108,16 @@ pub enum ServerEvent {
 pub enum HpgMessage {
     SyncClient(SyncClientMessage),
     SyncServer(SyncServerMessage),
-    ExecClient(ExecClientMessage),
+    ExecClient {
+        vars: Variables,
+        config: String,
+        run_defaults: bool,
+        show_plan: bool,
+        targets: Vec<String>,
+    },
     ExecServer(ExecServerMessage),
     Error(String),
     Debug(String),
-    Ping,
 }
 
 impl From<SyncClientMessage> for HpgMessage {
@@ -129,12 +129,6 @@ impl From<SyncClientMessage> for HpgMessage {
 impl From<SyncServerMessage> for HpgMessage {
     fn from(value: SyncServerMessage) -> Self {
         HpgMessage::SyncServer(value)
-    }
-}
-
-impl From<ExecClientMessage> for HpgMessage {
-    fn from(value: ExecClientMessage) -> Self {
-        HpgMessage::ExecClient(value)
     }
 }
 
