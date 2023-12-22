@@ -11,14 +11,20 @@ use super::{
         SyncServerMessage,
     },
 };
-use crate::{error::HpgRemoteError, task::LuaState};
+use crate::{
+    error::HpgRemoteError,
+    load_file, output,
+    remote::messages::ExecServerMessage,
+    task::{LuaState, Variables},
+    tracker::{self, Tracker},
+};
 use futures_util::{SinkExt, StreamExt};
 use librsync::whole;
 use nix::unistd::{Gid, Uid};
 use tokio::{
     fs::OpenOptions,
     io::{AsyncRead, AsyncWrite, AsyncWriteExt},
-    net::UnixListener,
+    net::{UnixListener, UnixStream},
     time,
 };
 use tokio_util::codec::Framed;
@@ -54,6 +60,7 @@ pub fn run_socket_server(
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
+    let _ = rt.enter();
     rt.block_on(async move {
         listen_socket(socket_path, &root_dir, lua).await?;
         if socket_path.exists() {
@@ -90,7 +97,7 @@ async fn listen_socket(
 
     eprintln!("SERVER: sync done");
 
-    server_exec_hpg(root_dir, lua, &mut rw).await?;
+    server_exec_hpg(root_dir, lua, rw).await?;
     // moving to execution mode now
     Ok(())
 }
@@ -151,43 +158,82 @@ async fn server_sync<R: AsyncRead + AsyncWrite + Unpin>(
     Ok(())
 }
 
-async fn server_exec_hpg<T: AsyncRead + AsyncWrite + Unpin>(
+async fn server_exec_hpg(
     root_dir: &Path,
     lua: LuaState,
-    rw: &mut Framed<T, HpgCodec<HpgMessage>>,
+    mut rw: Framed<UnixStream, HpgCodec<HpgMessage>>,
 ) -> Result<(), HpgRemoteError> {
+    match wait_for_exec_msg(&mut rw).await? {
+        HpgMessage::ExecClient {
+            vars,
+            config,
+            run_defaults,
+            show_plan,
+            targets,
+        } => {
+            tracker::sink().into_remote(rw);
+            if let Err(e) = execute_hpg(lua, config, vars, run_defaults, show_plan, targets).await {
+                output!("Remote error: {}", e);
+            }
+            rw = tracker::sink().into_local().unwrap();
+        }
+        _ => unreachable!(),
+    }
+
+    rw.send(HpgMessage::ExecServer(ExecServerMessage::Finish))
+        .await?;
+    Ok(())
+}
+
+async fn wait_for_exec_msg(
+    rw: &mut Framed<UnixStream, HpgCodec<HpgMessage>>,
+) -> Result<HpgMessage, HpgRemoteError> {
     loop {
         let msg = match time::timeout(Duration::from_secs(50), rw.next()).await {
             Ok(m) => m,
             Err(_e) => {
-                eprintln!("SERVER: Timed out");
-                break;
+                return Err(HpgRemoteError::Unknown("SERVER: Timed out".into()));
             }
         };
+
         let msg = if let Some(m) = msg {
             m
         } else {
-            eprintln!("SERVER: Stream closed");
-            break;
+            return Err(HpgRemoteError::Unknown("SERVER: Stream closed".into()));
         };
         let msg = msg?;
         match msg {
-            HpgMessage::ExecClient {
-                vars,
-                config,
-                run_defaults,
-                show_plan,
-                targets,
-            } => {
-                println!(
-                    "{:?} {} {} {} {:?}",
-                    vars, config, run_defaults, show_plan, targets
-                );
-            }
+            HpgMessage::ExecClient { .. } => return Ok(msg),
             _ => continue,
         }
     }
-    todo!()
+}
+
+async fn execute_hpg(
+    lua: LuaState,
+    config: String,
+    vars: Variables,
+    run_defaults: bool,
+    show_plan: bool,
+    targets: Vec<String>,
+) -> Result<(), HpgRemoteError> {
+    tracker::tracker().run(5);
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    output!("Config: {}, Targets: {:?}", config, targets);
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    // let code = load_file(&config)?;
+
+    // let lua = lua.eval(&code, vars)?;
+    // if opt.list {
+    //     output!("{}", style("Available Tasks").cyan());
+    //     for (name, task) in lua.available_targets() {
+    //         indent_output!(1, "{}: {}", style(name).green(), task.description());
+    //     }
+    //     return Ok(());
+    // }
+    // let requested_tasks: Vec<&str> = opt.targets.iter().map(|t| t.as_str()).collect();
+    // lua.execute(&requested_tasks, opt.run_defaults, opt.show)?;
+    Ok(())
 }
 
 fn apply_patch(path: &Path, patch: &[u8]) -> Result<(), HpgRemoteError> {

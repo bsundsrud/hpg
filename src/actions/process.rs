@@ -4,7 +4,7 @@ use console::style;
 use mlua::{Lua, Table};
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::runtime::Builder;
+use tokio::runtime::{Builder, Handle};
 use tokio::select;
 
 use super::util::exit_status;
@@ -42,13 +42,8 @@ fn exec_streaming_process(
     p.stdout(Stdio::piped());
     p.stderr(Stdio::piped());
     p.stdin(Stdio::null());
-
-    let rt = Builder::new_multi_thread()
-        .enable_all()
-        .thread_name("process-exec")
-        .build()
-        .expect("Could not build runtime");
-    let handle = rt.handle().clone();
+    let rt = Handle::current();
+    let handle = rt.clone();
     let output = rt.block_on(async move {
         let mut child = p.spawn().map_err(io_error)?;
 

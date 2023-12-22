@@ -1,6 +1,10 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::{debug_output, indent_output, output, tracker::{TRACKER, Tracker, self}, Result};
+use crate::{
+    debug_output, indent_output, output,
+    tracker::{self, Tracker},
+    Result,
+};
 use anyhow::anyhow;
 use console::style;
 use mlua::{self, FromLua, Function, Lua, LuaOptions, Table, UserData, Value, Variadic};
@@ -333,7 +337,6 @@ impl EvaluatedLuaState {
         show_plan: bool,
     ) -> Result<(), TaskError> {
         let mut requested_tasks = self.get_targets(tasks)?;
-
         if run_default_targets {
             let defaults = self.get_default_targets()?;
             if !defaults.is_empty() {
@@ -349,7 +352,7 @@ impl EvaluatedLuaState {
 
         let ordering = self.execution_ordering(&requested_handles);
         if show_plan {
-            output!("{}", style("Execution Plan").cyan());
+            output!("{}", style("Execution Plan").yellow());
             for (idx, handle) in ordering.into_iter().enumerate() {
                 let t = self.registry.task_for_handle(handle);
                 indent_output!(1, "{}. {}", idx + 1, t.description);
@@ -359,11 +362,12 @@ impl EvaluatedLuaState {
 
         let mut task_results: HashMap<TaskHandle, TaskResult> = HashMap::new();
         let task_table: Table = self.lua.named_registry_value("tasks")?;
-        tracker::global().run(ordering.len());
-        output!("{}", style("Execution").cyan());
+        tracker::tracker().run(ordering.len());
+        output!("{}", style("Execution").yellow());
         for task in ordering {
             let t = self.registry.task_for_handle(task);
-            tracker::global().task(t.description.clone());
+            tracker::tracker().task(t.description.clone());
+            output!("Task [ {} ]", style(t.description.clone()).cyan());
             let mut parent_failed = false;
 
             // Did all our parents run successfully?
@@ -372,7 +376,7 @@ impl EvaluatedLuaState {
                 match task_results.get(&parent).unwrap() {
                     TaskResult::Success => {}
                     TaskResult::Incomplete(_) => {
-                        tracker::global().task_skip();
+                        tracker::tracker().task_skip();
                         parent_failed = true;
                         break;
                     }
@@ -391,7 +395,7 @@ impl EvaluatedLuaState {
                         if ud.is::<TaskResult>() {
                             let tr: &TaskResult = &ud.borrow().unwrap();
                             if let TaskResult::Incomplete(_) = tr {
-                                tracker::global().task_skip();
+                                tracker::tracker().task_skip();
                             }
                             task_results.insert(task, tr.clone());
                         } else {
@@ -399,7 +403,7 @@ impl EvaluatedLuaState {
                         }
                     }
                     Ok(_) => {
-                        tracker::global().task_success();
+                        tracker::tracker().task_success();
                         task_results.insert(task, TaskResult::Success);
                     }
                     Err(mlua::Error::CallbackError { traceback, cause }) => {
@@ -409,7 +413,7 @@ impl EvaluatedLuaState {
                         } else {
                             output!("{}\n{}", cause, traceback);
                         }
-                        tracker::global().task_fail();
+                        tracker::tracker().task_fail();
                         task_results
                             .insert(task, TaskResult::Incomplete(Some("Error".to_string())));
                         break;
@@ -421,10 +425,10 @@ impl EvaluatedLuaState {
             }
         }
         if task_results.into_values().any(|r| r.incomplete()) {
-            tracker::global().finish_fail();
+            tracker::tracker().finish_fail();
             return Err(TaskError::SkippedTask);
         }
-        tracker::global().finish_success();
+        tracker::tracker().finish_success();
         Ok(())
     }
 }

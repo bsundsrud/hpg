@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use crate::{task::Variables, tracker::TrackerEvent};
+
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Copy)]
 pub enum FileType {
     Dir,
@@ -13,31 +15,31 @@ pub struct LocalFile {
     pub rel_path: PathBuf,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FileInfo {
     pub rel_path: PathBuf,
     pub status: FileStatus,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum FileStatus {
     Present { sig: Vec<u8> },
     Absent,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FilePatch {
     pub rel_path: PathBuf,
     pub patch: PatchType,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum PatchType {
     Full { contents: Vec<u8> },
     Partial { delta: Vec<u8> },
 }
 
-/* 
+/*
 Message Flow
 ============
 
@@ -69,37 +71,62 @@ Exec     --->                       Run HPG on server side
 
           **
 Cancel   --->                       Cancel current server-side run and exit
-        
+
 */
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum SyncClientMessage {
     FileList(Vec<LocalFile>),
     Patch(FilePatch),
     Close,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum SyncServerMessage {
     FileStatus(Vec<FileInfo>),
     PatchApplied(PathBuf),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum ExecServerMessage {
+    Event(TrackerEvent),
+    Finish,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum HpgMessage {
+    SyncClient(SyncClientMessage),
+    SyncServer(SyncServerMessage),
+    ExecClient {
+        vars: Variables,
+        config: String,
+        run_defaults: bool,
+        show_plan: bool,
+        targets: Vec<String>,
+    },
+    ExecServer(ExecServerMessage),
     Error(String),
     Debug(String),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum ExecClientMessage {
-    Exec,
-    Cancel
+impl From<SyncClientMessage> for HpgMessage {
+    fn from(value: SyncClientMessage) -> Self {
+        HpgMessage::SyncClient(value)
+    }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum ExecServerMessage {
-    Event,
-    Finish
+impl From<SyncServerMessage> for HpgMessage {
+    fn from(value: SyncServerMessage) -> Self {
+        HpgMessage::SyncServer(value)
+    }
 }
 
+impl From<ExecServerMessage> for HpgMessage {
+    fn from(value: ExecServerMessage) -> Self {
+        HpgMessage::ExecServer(value)
+    }
+}
 
-pub fn debug<S: Into<String>>(msg: S) -> SyncServerMessage {
-    SyncServerMessage::Debug(msg.into())
+pub fn debug<S: Into<String>>(msg: S) -> HpgMessage {
+    HpgMessage::Debug(msg.into())
 }

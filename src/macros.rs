@@ -2,7 +2,7 @@
 macro_rules! output {
     ($($arg:tt)+) => ({
         use $crate::tracker::Tracker;
-        $crate::tracker::TRACKER.get().unwrap().println(format_args!($($arg)+));
+        $crate::tracker::tracker().println(format_args!($($arg)+));
     });
 }
 
@@ -10,7 +10,7 @@ macro_rules! output {
 macro_rules! indent_output {
     ($level:expr, $($arg:tt)+) => ({
         use $crate::tracker::Tracker;
-        $crate::tracker::TRACKER.get().unwrap().indent_println($level, format_args!($($arg)+));
+        $crate::tracker::tracker().indent_println($level, format_args!($($arg)+));
     });
 }
 
@@ -18,6 +18,6 @@ macro_rules! indent_output {
 macro_rules! debug_output {
     ($($arg:tt)+) => ({
         use $crate::tracker::Tracker;
-        $crate::tracker::TRACKER.get().unwrap().debug_println(format_args!($($arg)+));
+        $crate::tracker::tracker().debug_println(format_args!($($arg)+));
     });
 }

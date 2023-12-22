@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{error::TaskError, output, task::TaskResult, Result};
+use crate::{error::TaskError, indent_output, output, task::TaskResult, Result};
 mod access;
 mod file;
 mod process;
@@ -44,7 +44,7 @@ fn format_lua_value(ctx: &Lua, v: mlua::Value) -> Result<String, mlua::Error> {
 pub fn echo(lua: &Lua) -> Result<(), TaskError> {
     let f = lua.create_function(|ctx: &Lua, msg: mlua::Value| {
         output!("echo:");
-        output!("  {}", format_lua_value(ctx, msg)?);
+        indent_output!(2, "{}", format_lua_value(ctx, msg)?);
         Ok(())
     })?;
     lua.globals().set("echo", f)?;

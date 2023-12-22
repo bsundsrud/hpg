@@ -1,7 +1,9 @@
 use super::{
     client,
     config::{HostConfig, InventoryConfig},
-    messages::{FileInfo, FilePatch, PatchType, SyncClientMessage, SyncServerMessage, ExecServerMessage, ServerEvent},
+    messages::{
+        ExecServerMessage, FileInfo, FilePatch, PatchType, SyncClientMessage, SyncServerMessage,
+    },
 };
 use crate::{
     debug_output,
@@ -12,11 +14,12 @@ use crate::{
         messages::{FileStatus, HpgMessage},
     },
     task::{LuaState, Variables},
-    tracker::{TRACKER, Tracker, self},
+    tracker::{self, Tracker, TrackerEvent},
     HpgOpt,
 };
 use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
+use console::style;
 use futures_util::Future;
 use librsync::whole;
 use russh::{
@@ -271,16 +274,26 @@ async fn exec_hpg(
 
     loop {
         match bus.rx().await? {
-            Some(HpgMessage::ExecServer(ExecServerMessage::Event(e))) => {
-                match e {
-                    ServerEvent::TaskStart(t) =>tracker::global().task(t),
-                    ServerEvent::BatchStart(b) => tracker::global().run(b),
-                    ServerEvent::TaskSuccess => tracker::global().task_success(),
-                    ServerEvent::TaskSkip => tracker::global().task_skip(),
-                    ServerEvent::TaskFail => tracker::global().task_fail(),
-                    ServerEvent::BatchSuccess => tracker::global().finish_success(),
-                    ServerEvent::BatchFail => tracker::global().finish_fail(),
+            Some(HpgMessage::ExecServer(ExecServerMessage::Event(e))) => match e {
+                TrackerEvent::TaskStart(t) => tracker::tracker().task(t),
+                TrackerEvent::BatchStart(b) => tracker::tracker().run(b),
+                TrackerEvent::TaskComplete => tracker::tracker().task_success(),
+                TrackerEvent::TaskSkip => tracker::tracker().task_skip(),
+                TrackerEvent::TaskFail => tracker::tracker().task_fail(),
+                TrackerEvent::BatchSuccess => tracker::tracker().finish_success(),
+                TrackerEvent::BatchFail => tracker::tracker().finish_fail(),
+                TrackerEvent::Println { msg, indent } => {
+                    if let Some(i) = indent {
+                        tracker::tracker().indent_println(i, format_args!("{}", msg));
+                    } else {
+                        tracker::tracker().println(format_args!("{}", msg));
+                    }
                 }
+                TrackerEvent::Debug(m) => tracker::tracker().debug_println(format_args!("{}", m)),
+                TrackerEvent::ProgressStart(c) => tracker::tracker().progressbar(c),
+                TrackerEvent::ProgressInc(m) => tracker::tracker().progressbar_progress(m),
+                TrackerEvent::ProgressFinish(m) => tracker::tracker().progressbar_finish(m),
+                TrackerEvent::Exit => unreachable!(),
             },
             Some(HpgMessage::ExecServer(ExecServerMessage::Finish)) => break,
             Some(_) => {
@@ -332,7 +345,8 @@ async fn sync_files(channel: &mut Channel<Msg>, root_path: &Path) -> Result<(), 
             }
         };
     }
-    tracker::global().progressbar(patches.len());
+    output!("{}", style("Sync Files").yellow());
+    tracker::tracker().progressbar(patches.len());
     debug_output!("Outstanding patches: {:?}", patches);
     loop {
         if patches.is_empty() {
@@ -345,7 +359,8 @@ async fn sync_files(channel: &mut Channel<Msg>, root_path: &Path) -> Result<(), 
             Some(HpgMessage::SyncServer(SyncServerMessage::PatchApplied(p))) => {
                 output!("Patched: {}", p.to_string_lossy());
                 patches.remove(&p);
-                tracker::global().progressbar_progress(format!("Applied: {}", &p.to_string_lossy()));
+                tracker::tracker()
+                    .progressbar_progress(format!("Applied: {}", &p.to_string_lossy()));
                 debug_output!("Patches left: {:?}", patches);
             }
             Some(HpgMessage::Debug(ref s)) => {
@@ -363,7 +378,7 @@ async fn sync_files(channel: &mut Channel<Msg>, root_path: &Path) -> Result<(), 
         }
     }
 
-    tracker::global().progressbar_finish("Sync Complete".into());
+    tracker::tracker().progressbar_finish(format!("{} Sync Complete.", style("✓").green()));
     Ok(())
 }
 

@@ -8,8 +8,6 @@ use error::HpgRemoteError;
 
 use remote::config::InventoryConfig;
 use remote::ssh::HostInfo;
-use tracker::TRACKER;
-use tracker::Tracker;
 
 use std::collections::HashMap;
 use std::fs::File;
@@ -250,15 +248,18 @@ fn run_hpg() -> Result<()> {
 
     match opt.cmd {
         Some(RemoteCommands::Local { hpg_opts }) => {
-            tracker::init_local().set_debug(opt.globals.debug);
-            run_hpg_local(hpg_opts, lua)
-        },
+            let handle = tracker::init(opt.globals.debug)?;
+
+            let res = run_hpg_local(hpg_opts, lua);
+            handle.finish();
+            res
+        }
         Some(RemoteCommands::Ssh {
             host,
             hpg_opts,
             inventory,
         }) => {
-            tracker::init_local().set_debug(opt.globals.debug);
+            let handle = tracker::init(opt.globals.debug)?;
             let inventory = if let Some(p) = inventory {
                 try_inventory_files(&[&p])?
             } else {
@@ -271,11 +272,13 @@ fn run_hpg() -> Result<()> {
             };
             let vars = parse_variables(&hpg_opts)?;
             remote::ssh::run_hpg_ssh(host, hpg_opts, vars, inventory)?;
+            handle.finish();
             Ok(())
         }
         Some(RemoteCommands::Server { root_dir }) => {
-            //tracker::init_remote().set_debug(opt.globals.debug);
+            let handle = tracker::init(opt.globals.debug)?;
             remote::server::run_socket_server(root_dir, lua, &PathBuf::from("/tmp/hpg.socket"))?;
+            handle.finish();
             Ok(())
         }
         None => {
@@ -305,7 +308,6 @@ fn main() -> Result<()> {
             HpgError::Parse(p) => eprintln!("Failed parsing: {}", p),
             HpgError::Serde(e) => eprintln!("Failed to parse json: {}", e),
             HpgError::Other(e) => eprintln!("{}", e),
-            
         }
     }
     Ok(())

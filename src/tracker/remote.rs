@@ -1,4 +1,10 @@
-use std::{sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, fmt::Arguments};
+use std::{
+    fmt::Arguments,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+};
 
 use futures_util::SinkExt;
 use tokio::io::AsyncWrite;
@@ -8,7 +14,6 @@ use crate::remote::{codec::HpgCodec, messages::HpgMessage};
 
 use super::Tracker;
 
-
 pub struct RemoteTracker<W> {
     debug: AtomicBool,
     writer: Arc<Mutex<FramedWrite<W, HpgCodec<HpgMessage>>>>,
@@ -16,9 +21,14 @@ pub struct RemoteTracker<W> {
 }
 
 impl<W> RemoteTracker<W>
-where W: AsyncWrite + Unpin {
+where
+    W: AsyncWrite + Unpin,
+{
     pub fn new(writer: W) -> RemoteTracker<W> {
-        let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
         RemoteTracker {
             debug: AtomicBool::new(false),
             writer: Arc::new(Mutex::new(FramedWrite::new(writer, HpgCodec::new()))),
@@ -31,18 +41,14 @@ where W: AsyncWrite + Unpin {
         let w = self.writer.clone();
         let w = &mut *w.lock().unwrap();
         let _ = rt.enter();
-        let _res = rt.block_on(async move {
-            w.send(msg).await
-        });
+        let _res = rt.block_on(async move { w.send(msg).await });
     }
 }
 
-impl<W> Tracker for RemoteTracker<W> 
-where W: AsyncWrite + Unpin {
-    fn set_debug(&self, debug: bool) {
-        self.debug.store(debug, Ordering::Relaxed);
-    }
-
+impl<W> Tracker for RemoteTracker<W>
+where
+    W: AsyncWrite + Unpin,
+{
     fn debug_println(&self, args: Arguments) {
         todo!()
     }

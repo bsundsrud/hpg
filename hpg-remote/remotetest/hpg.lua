@@ -1,5 +1,0 @@
-Task1 = task("Task 1", function()
-    echo(vars.test_var)
-    echo(vars.tyr_var)
-    echo(vars.from_file)
-end)
