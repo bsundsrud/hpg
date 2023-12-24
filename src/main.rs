@@ -134,6 +134,14 @@ pub struct HpgOpt {
     )]
     config: String,
     #[arg(
+        short,
+        long,
+        name = "PROJECT-DIR",
+        default_value = ".",
+        help = "Path to project root"
+    )]
+    project_dir: String,
+    #[arg(
         short = 'D',
         long = "default-targets",
         name = "default-targets",
