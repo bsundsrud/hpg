@@ -1,3 +1,4 @@
+use clap::builder::TypedValueParser;
 use clap::Args;
 use clap::CommandFactory;
 use clap::Parser;
@@ -70,6 +71,29 @@ fn try_parse_host(host_str: &str) -> Result<HostInfo> {
     })
 }
 
+#[derive(Debug, Clone)]
+struct ProjectDirParser {}
+
+impl ProjectDirParser {
+    fn new() -> Self {
+        Self {}
+    }
+}
+impl TypedValueParser for ProjectDirParser {
+    type Value = PathBuf;
+
+    fn parse_ref(
+        &self,
+        _cmd: &clap::Command,
+        _arg: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        let s = value.to_string_lossy().to_string();
+        let p = PathBuf::from(s);
+        Ok(p.canonicalize()?)
+    }
+}
+
 #[derive(Debug, Parser)]
 #[command(about, version)]
 #[command(propagate_version = true)]
@@ -136,11 +160,12 @@ pub struct HpgOpt {
     #[arg(
         short,
         long,
-        name = "PROJECT-DIR",
+        help = "Path to project root. Default is the current directory",
+        required = false,
         default_value = ".",
-        help = "Path to project root"
+        value_parser(ProjectDirParser::new())
     )]
-    project_dir: String,
+    project_dir: PathBuf,
     #[arg(
         short = 'D',
         long = "default-targets",
@@ -196,6 +221,7 @@ fn try_inventory_files(paths: &[&str]) -> Result<InventoryConfig> {
 }
 
 fn run_hpg_local(opt: HpgOpt, lua: LuaState) -> Result<()> {
+    std::env::set_current_dir(&opt.project_dir)?;
     let vars = parse_variables(&opt)?;
     let code = load_file(&opt.config)?;
 
@@ -230,6 +256,7 @@ fn run_hpg() -> Result<()> {
         println!("{}", lsp_defs());
         return Ok(());
     }
+
     let lua = LuaState::new()?;
     lua.register_fn(actions::echo)?;
     lua.register_fn(actions::fail)?;
