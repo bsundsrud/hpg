@@ -1378,6 +1378,7 @@ dependencies = [
  "russh",
  "russh-config",
  "russh-keys",
+ "rustix 0.38.21",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -2687,9 +2688,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.38.15"
+version = "0.38.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2f9da0cbd88f9f09e7814e388301c8414c51c62aa6ce1e4b5c551d49d96e531"
+checksum = "2b426b0506e5d50a7d8dafcf2e81471400deb602392c7dd110815afb4eaf02a3"
 dependencies = [
  "bitflags 2.4.0",
  "errno",
@@ -3045,7 +3046,7 @@ dependencies = [
  "cfg-if",
  "fastrand 2.0.1",
  "redox_syscall 0.3.5",
- "rustix 0.38.15",
+ "rustix 0.38.21",
  "windows-sys 0.48.0",
 ]
 
@@ -3543,7 +3544,7 @@ dependencies = [
  "either",
  "home",
  "once_cell",
- "rustix 0.38.15",
+ "rustix 0.38.21",
 ]
 
 [[package]]
