@@ -45,10 +45,10 @@ impl UserData for HpgFile {
         });
 
         methods.add_method("contents", |_, this, _: ()| {
-            output!("file_contents {}", &this.path.to_string_lossy());
+            output!("contents {}", &this.path.to_string_lossy());
 
             let contents = util::read_file(&this.path).map_err(error::io_error)?;
-            Ok(contents)
+            Ok(String::from_utf8_lossy(&contents).to_string())
         });
         methods.add_method("exists", |_, this, _: ()| {
             let exists = this.path.exists();

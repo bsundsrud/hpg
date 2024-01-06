@@ -16,7 +16,10 @@ quux = task("quux", { bar, baz }, function()
 end)
 
 roles = task("roles task", function()
-  local meta = from_json(file_contents("meta.json"))
+  local f = file("meta.json")
+  local contents = f:contents()
+  echo(contents)
+  local meta = from_json(contents)
   echo(meta)
 end)
 

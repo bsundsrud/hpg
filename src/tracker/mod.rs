@@ -4,7 +4,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex, OnceLock, RwLock,
     },
-    thread::JoinHandle,
+    thread::JoinHandle, time::Duration,
 };
 
 
@@ -219,7 +219,7 @@ impl EventSink {
      */
     fn wait_for_drain(&self) {
         while !self.rx.is_empty() {
-            println!("waiting");
+            std::thread::sleep(Duration::from_millis(10));
         }
     }
 

@@ -12,12 +12,15 @@ use super::messages::{FileType, LocalFile};
 
 pub fn find_hpg_files(root: &Path) -> Result<Vec<LocalFile>, HpgRemoteError> {
     let mut files = Vec::new();
+    // Overrides work the opposite here.  Lines with ! ignore, otherwise
+    // it's treated as a whitelist
     let overrides = OverrideBuilder::new(root)
         .case_insensitive(true)?
-        .add(".hpgignore")?
-        .add("inventory.yaml")?
-        .add("inventory.yml")?
-        .add("inventory.json")?
+        .add("!.meta/")?
+        .add("!.hpgignore")?
+        .add("!inventory.yaml")?
+        .add("!inventory.yml")?
+        .add("!inventory.json")?
         .build()?;
     for res in WalkBuilder::new(root)
         .add_custom_ignore_filename(".hpgignore")
