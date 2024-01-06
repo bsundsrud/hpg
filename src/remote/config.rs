@@ -5,6 +5,7 @@ use serde::Deserialize;
 use crate::{error::HpgRemoteError, Result};
 
 #[derive(Debug, Deserialize, Default)]
+#[serde(default)]
 pub struct InventoryConfig {
     pub hosts: HashMap<String, HostConfig>,
     pub vars: HashMap<String, String>,
@@ -16,10 +17,13 @@ pub struct HostConfig {
     pub host: String,
     pub user: Option<String>,
     pub port: Option<u16>,
+    #[serde(default)]
+    pub sudo: bool,
     pub remote_path: Option<String>,
     pub remote_exe: Option<String>,
-    pub remote_hpg_exe: Option<String>,
+    #[serde(default)]
     pub vars_files: Vec<String>,
+    #[serde(default)]
     pub vars: HashMap<String, String>,
 }
 
@@ -51,7 +55,7 @@ impl InventoryConfig {
                 ));
             }
         };
-        Ok(dbg!(config))
+        Ok(config)
     }
 
     pub fn config_for_host(&self, host: &str) -> Option<&HostConfig> {

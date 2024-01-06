@@ -107,8 +107,7 @@ pub fn run_hpg_ssh(
     } else {
         host
     };
-    let root_dir = PathBuf::from(&opt.config).canonicalize()?;
-    let root_dir = root_dir.parent().unwrap();
+    let root_dir = PathBuf::from(&opt.project_dir).canonicalize()?;
     let remote_path = host_config
         .and_then(|hc| hc.remote_path.clone())
         .unwrap_or_else(|| {
@@ -120,10 +119,11 @@ pub fn run_hpg_ssh(
                     .unwrap_or_else(|| "unknown".to_string())
             )
         });
+    let sudo = host_config.map_or_else(|| false, |hc| hc.sudo);
 
     let remote_exe = host_config
         .and_then(|hc| hc.remote_exe.clone())
-        .unwrap_or_else(|| "/home/benn/bin/hpg".to_string());
+        .unwrap_or_else(|| "hpg".to_string());
 
     let vars = merge_vars(vars, &host_config, &inventory)?;
 
@@ -134,7 +134,7 @@ pub fn run_hpg_ssh(
     runtime.block_on(async move {
         let ssh_config = load_ssh_config(host, None, None)?;
         let client = Session::connect(ssh_config).await?;
-        let process = client.start_remote(&remote_path, &remote_exe).await?;
+        let process = client.start_remote(&remote_path, &remote_exe, sudo).await?;
         let socket = client.connect_socket(&root_dir, "/tmp/hpg.socket".to_string(), opt, vars);
         let handle = tokio::spawn(async move { process.await });
         socket.await?;
@@ -188,9 +188,11 @@ impl Session {
         &self,
         remote_path: &str,
         exe_path: &str,
+        sudo: bool,
     ) -> Result<impl Future<Output = Result<(), HpgRemoteError>>, HpgRemoteError> {
         let mut channel = self.session.channel_open_session().await?;
-        let cmdline = format!("{} server {}", exe_path, remote_path);
+        let sudo_str = if sudo { "sudo " } else { "" };
+        let cmdline = format!("{}{} server {}", sudo_str, exe_path, remote_path);
         debug_output!("Remote cmdline: {}", cmdline);
         channel.exec(true, cmdline).await?;
         let block = async move {
@@ -268,6 +270,7 @@ async fn exec_hpg(
         config: opts.config,
         run_defaults: opts.run_defaults,
         show_plan: opts.show,
+        list_tasks: opts.list,
         targets: opts.targets,
     };
     bus.tx(msg).await?;

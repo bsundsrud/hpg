@@ -10,8 +10,8 @@ pub fn file_hash(path: &Path) -> Result<String, IoError> {
     Ok(format!("{:02x}", hash))
 }
 
-pub fn content_hash(content: &str) -> String {
+pub fn content_hash(content: &[u8]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(content.as_bytes());
+    hasher.update(content);
     format!("{:02x}", hasher.finalize())
 }

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::Path};
 
-use anyhow::{Context, anyhow};
+use anyhow::{anyhow, Context};
 use mlua::{Lua, MetaMethod, UserData, Value};
 use serde::{Deserialize, Serialize};
 
@@ -26,8 +26,7 @@ impl Variables {
 
     pub fn from_file(f: &str) -> Result<Variables, anyhow::Error> {
         let s = crate::load_file(&f)?;
-        let json = serde_json::from_str(&s)
-            .with_context(|| format!("File: {}", f))?;
+        let json = serde_json::from_str(&s).with_context(|| format!("File: {}", f))?;
         Ok(Variables::from_json(json))
     }
 
@@ -82,7 +81,9 @@ impl Variables {
 
 impl Default for Variables {
     fn default() -> Self {
-        Self { raw: serde_json::Value::Object(serde_json::Map::new()) }
+        Self {
+            raw: serde_json::Value::Object(serde_json::Map::new()),
+        }
     }
 }
 

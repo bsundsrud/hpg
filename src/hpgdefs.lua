@@ -77,8 +77,15 @@ end
 ---@field user string? User to assign object to.
 ---@field group string? Group to assign object to.
 
+--- Options table for chown directory.
+---@class DirChownOpts
+---@field user string? User to assign object to.
+---@field group string? Group to assign object to.
+---@field recursive boolean? Whether or not to apply chown recursively. Default `false`.
+
+
 --- Change ownership of a directory.
----@param opts ChownOpts
+---@param opts DirChownOpts
 ---@return Dir dir Original `Dir` instance.
 function Dir:chown(opts)
 end
@@ -97,6 +104,18 @@ end
 ---@param dst string Destination path of the symlink, relative to current working directory.
 ---@return Dir dst `Dir` object for the destination.
 function Dir:symlink(dst)
+end
+
+--- Copy directory to destination.
+---@param dst string Destination path of the directory, relative to current working directory.
+---@return Dir dst `Dir` object for the destination.
+function Dir:copy(dst)
+end
+
+--- Copy all directory contents to destination.
+---@param dst string Destination path of the directory, relative to current working directory.
+---@return Dir dst `Dir` object for the destination.
+function Dir:copy_contents(dst)
 end
 
 --- Create a new instance of the `File` class.

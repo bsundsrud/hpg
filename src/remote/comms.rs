@@ -51,7 +51,12 @@ where
         Ok(Pin::new(bus).rx().await?)
     }
 
-    pub fn into_parts(self) -> (FramedWrite<W, HpgCodec<HpgMessage>>, FramedRead<R, HpgCodec<HpgMessage>>) {
+    pub fn into_parts(
+        self,
+    ) -> (
+        FramedWrite<W, HpgCodec<HpgMessage>>,
+        FramedRead<R, HpgCodec<HpgMessage>>,
+    ) {
         let s = self.0.clone();
         let r = s.lock().unwrap().take().unwrap();
         r.into_parts()
@@ -117,7 +122,12 @@ where
         }
     }
 
-    pub fn into_parts(self) -> (FramedWrite<W, HpgCodec<HpgMessage>>, FramedRead<R, HpgCodec<HpgMessage>>) {
+    pub fn into_parts(
+        self,
+    ) -> (
+        FramedWrite<W, HpgCodec<HpgMessage>>,
+        FramedRead<R, HpgCodec<HpgMessage>>,
+    ) {
         (self.writer, self.reader)
     }
 }

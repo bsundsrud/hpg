@@ -102,6 +102,7 @@ pub enum HpgMessage {
         config: String,
         run_defaults: bool,
         show_plan: bool,
+        list_tasks: bool,
         targets: Vec<String>,
     },
     ExecServer(ExecServerMessage),

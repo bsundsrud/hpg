@@ -12,12 +12,13 @@ use super::{
     },
 };
 use crate::{
-    error::HpgRemoteError,
-    load_file, output,
+    error::{HpgError, HpgRemoteError},
+    indent_output, load_file, output,
     remote::messages::ExecServerMessage,
     task::{LuaState, Variables},
     tracker::{self, Tracker},
 };
+use console::style;
 use futures_util::{SinkExt, StreamExt};
 use librsync::whole;
 use nix::unistd::{Gid, Uid};
@@ -169,10 +170,21 @@ async fn server_exec_hpg(
             config,
             run_defaults,
             show_plan,
+            list_tasks,
             targets,
         } => {
             tracker::sink().into_remote(rw);
-            if let Err(e) = execute_hpg(lua, config, vars, run_defaults, show_plan, targets).await {
+            if let Err(e) = execute_hpg(
+                lua,
+                config,
+                vars,
+                run_defaults,
+                show_plan,
+                list_tasks,
+                targets,
+            )
+            .await
+            {
                 output!("Remote error: {}", e);
             }
             rw = tracker::sink().into_local().unwrap();
@@ -215,24 +227,26 @@ async fn execute_hpg(
     vars: Variables,
     run_defaults: bool,
     show_plan: bool,
+    list_tasks: bool,
     targets: Vec<String>,
 ) -> Result<(), HpgRemoteError> {
     tracker::tracker().run(5);
     tokio::time::sleep(Duration::from_secs(1)).await;
     output!("Config: {}, Targets: {:?}", config, targets);
     tokio::time::sleep(Duration::from_secs(1)).await;
-    // let code = load_file(&config)?;
+    let code = load_file(&config).map_err(Box::new)?;
 
-    // let lua = lua.eval(&code, vars)?;
-    // if opt.list {
-    //     output!("{}", style("Available Tasks").cyan());
-    //     for (name, task) in lua.available_targets() {
-    //         indent_output!(1, "{}: {}", style(name).green(), task.description());
-    //     }
-    //     return Ok(());
-    // }
-    // let requested_tasks: Vec<&str> = opt.targets.iter().map(|t| t.as_str()).collect();
-    // lua.execute(&requested_tasks, opt.run_defaults, opt.show)?;
+    let lua = lua.eval(&code, vars).map_err(Box::new)?;
+    if list_tasks {
+        output!("{}", style("Available Tasks").cyan());
+        for (name, task) in lua.available_targets() {
+            indent_output!(1, "{}: {}", style(name).green(), task.description());
+        }
+        return Ok(());
+    }
+    let requested_tasks: Vec<&str> = targets.iter().map(|t| t.as_str()).collect();
+    lua.execute(&requested_tasks, run_defaults, show_plan)
+        .map_err(|e| Box::new(HpgError::from(e)))?;
     Ok(())
 }
 

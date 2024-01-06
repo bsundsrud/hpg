@@ -154,7 +154,7 @@ pub struct HpgOpt {
         long,
         name = "CONFIG",
         default_value = "hpg.lua",
-        help = "Path to hpg config file"
+        help = "Path to hpg config file, relative to project-dir"
     )]
     config: String,
     #[arg(
@@ -298,12 +298,7 @@ fn run_hpg() -> Result<()> {
             let inventory = if let Some(p) = inventory {
                 try_inventory_files(&[&p])?
             } else {
-                try_inventory_files(&[
-                    "inventory.yaml",
-                    "inventory.yml",
-                    "inventory.hjson",
-                    "inventory.json",
-                ])?
+                try_inventory_files(&["inventory.yaml", "inventory.yml", "inventory.json"])?
             };
             let vars = parse_variables(&hpg_opts)?;
             remote::ssh::run_hpg_ssh(host, hpg_opts, vars, inventory)?;

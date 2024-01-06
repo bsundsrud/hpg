@@ -77,9 +77,9 @@ pub enum HpgRemoteError {
     SerilizationError(#[from] ciborium::ser::Error<std::io::Error>),
     #[error("Error deserializing client/server communications: {0}")]
     DeserilizationError(#[from] ciborium::de::Error<std::io::Error>),
-    #[error("Error deserializing config: {0}")]
+    #[error("Error deserializing inventory config: {0}")]
     HJsonError(#[from] serde_json::Error),
-    #[error("Error deserializing config: {0}")]
+    #[error("Error deserializing inventory config: {0}")]
     YamlError(#[from] serde_yaml::Error),
     #[error("Unknown inventory format: {0}")]
     ConfigError(String),
@@ -87,6 +87,8 @@ pub enum HpgRemoteError {
     RsyncError(#[from] librsync::Error),
     #[error("Unknown Error: {0}")]
     Unknown(String),
+    #[error("Exec Error: {0}")]
+    ExecError(#[from] Box<HpgError>),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
