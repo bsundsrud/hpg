@@ -1,16 +1,14 @@
 use std::{
-    fmt::{Arguments, Debug},
+    fmt::{Debug},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Mutex, Once, OnceLock,
+        Mutex,
     },
     time::{Duration, Instant},
 };
 
 use console::{style, Term};
 use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressStyle};
-
-use super::Tracker;
 
 #[derive(Debug)]
 pub struct PrettyTracker {
@@ -54,7 +52,7 @@ impl PrettyTracker {
 
     pub fn println(&self, msg: &str) {
         self.bars.suspend(|| {
-            self.console.write_line(&msg).unwrap();
+            self.console.write_line(msg).unwrap();
         });
     }
 

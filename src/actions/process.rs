@@ -4,7 +4,7 @@ use console::style;
 use mlua::{Lua, Table};
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::runtime::{Builder, Handle};
+
 use tokio::select;
 
 use super::util::exit_status;

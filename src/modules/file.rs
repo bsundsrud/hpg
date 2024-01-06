@@ -6,7 +6,7 @@ use std::{
 };
 
 use mlua::{Function, Lua, MetaMethod, Table, UserData, Value};
-use nix::unistd::{geteuid, Uid, User};
+use nix::unistd::{geteuid, User};
 
 use crate::{
     actions::util,
@@ -141,7 +141,7 @@ impl UserData for HpgFile {
                 let src_contents =
                     run_template_file(&this.path, template_context).map_err(error::task_error)?;
 
-                let updated = if should_update_file(&dst, &src_contents.as_bytes())
+                let updated = if should_update_file(&dst, src_contents.as_bytes())
                     .map_err(error::io_error)?
                 {
                     let mut outfile = OpenOptions::new()
@@ -211,7 +211,7 @@ impl UserData for HpgFile {
             let marker = opts
                 .get::<_, Option<String>>("marker")?
                 .ok_or_else(|| error::action_error("append: 'marker' is required"))?;
-            let content_hash = hash::content_hash(&input.as_bytes());
+            let content_hash = hash::content_hash(input.as_bytes());
             let updated = append_to_existing(&this.path, &marker, &input, &content_hash)?;
             Ok(updated)
         });
@@ -251,7 +251,7 @@ impl UserData for HpgFile {
                 .map_err(|e| error::action_error(format!("Unable to parse context: {}", e)))?;
             let input = run_template(&input, template_context)
                 .map_err(|e| error::action_error(e.to_string()))?;
-            let content_hash = hash::content_hash(&input.as_bytes());
+            let content_hash = hash::content_hash(input.as_bytes());
             let updated = append_to_existing(&this.path, &marker, &input, &content_hash)?;
             Ok(updated)
         });

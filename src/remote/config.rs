@@ -61,7 +61,7 @@ impl InventoryConfig {
     pub fn config_for_host(&self, host: &str) -> Option<&HostConfig> {
         self.hosts
             .iter()
-            .find(|(ref h, _)| h.as_str() == host)
+            .find(|(h, _)| h.as_str() == host)
             .map(|(_k, v)| v)
     }
 }

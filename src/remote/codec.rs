@@ -17,7 +17,7 @@ pub struct HpgCodec<T> {
 impl<T> HpgCodec<T> {
     pub fn new() -> HpgCodec<T> {
         HpgCodec {
-            _data: PhantomData::default(),
+            _data: PhantomData,
         }
     }
 }

@@ -48,13 +48,13 @@ fn parse_variable(s: &str) -> Result<(String, String)> {
 }
 
 fn try_parse_host(host_str: &str) -> Result<HostInfo> {
-    let (user, rest) = if let Some((u, rest)) = host_str.split_once("@") {
+    let (user, rest) = if let Some((u, rest)) = host_str.split_once('@') {
         (Some(u.to_string()), rest)
     } else {
         (None, host_str)
     };
 
-    let (hostname, port) = if let Some((h, p)) = rest.split_once(":") {
+    let (hostname, port) = if let Some((h, p)) = rest.split_once(':') {
         let port = Some(p.parse::<u16>().map_err(|_e| HpgRemoteError::ParseHost {
             orig: host_str.to_string(),
             reason: "Could not parse port".into(),
@@ -204,7 +204,7 @@ fn parse_variables(opt: &HpgOpt) -> Result<Variables> {
     let mut v = Variables::from_map(&vars)?;
 
     for f in opt.var_file.iter() {
-        let file_vars = Variables::from_file(&f)?;
+        let file_vars = Variables::from_file(f)?;
         v = file_vars.merge(v)?;
     }
     Ok(v)

@@ -35,7 +35,7 @@ impl GraphState {
                 let dep_idx = id_graph_map
                     .get(&dep.id)
                     .expect("Dep not found in task map");
-                dep_map.entry(*idx).or_insert_with(Vec::new).push(*dep_idx);
+                dep_map.entry(*idx).or_default().push(*dep_idx);
             }
         }
 

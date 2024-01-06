@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path};
+use std::{collections::HashMap};
 
 use anyhow::{anyhow, Context};
 use mlua::{Lua, MetaMethod, UserData, Value};
@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     actions::util,
-    error::{self, HpgError},
+    error::{self},
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -20,12 +20,12 @@ impl Variables {
     }
 
     pub fn from_map(map: &HashMap<String, String>) -> Result<Variables, serde_json::Error> {
-        let json = serde_json::to_value(&map)?;
+        let json = serde_json::to_value(map)?;
         Ok(Variables::from_json(json))
     }
 
     pub fn from_file(f: &str) -> Result<Variables, anyhow::Error> {
-        let s = crate::load_file(&f)?;
+        let s = crate::load_file(f)?;
         let json = serde_json::from_str(&s).with_context(|| format!("File: {}", f))?;
         Ok(Variables::from_json(json))
     }
@@ -99,7 +99,7 @@ fn merge_objects(
             Ok(Value::Object(left))
         }
         _ => {
-            return Err(anyhow!("Only JSON Objects can be merged"));
+            Err(anyhow!("Only JSON Objects can be merged"))
         }
     }
 }

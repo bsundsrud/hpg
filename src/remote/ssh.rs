@@ -13,7 +13,7 @@ use crate::{
         comms::SyncBus,
         messages::{FileStatus, HpgMessage},
     },
-    task::{LuaState, Variables},
+    task::{Variables},
     tracker::{self, Tracker, TrackerEvent},
     HpgOpt,
 };
@@ -27,19 +27,19 @@ use russh::{
     Channel, ChannelMsg, Disconnect,
 };
 use russh_keys::{key, load_secret_key};
-use serde::de::VariantAccess;
+
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashSet},
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
 use tokio::{
     fs::File,
-    io::{AsyncReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncReadExt},
     time::timeout,
 };
-use tokio_util::codec::{Decoder, FramedRead, LinesCodec};
+use tokio_util::codec::{Decoder, LinesCodec};
 
 #[derive(Debug, Clone)]
 pub struct HostInfo {
@@ -78,12 +78,12 @@ fn merge_vars(
 ) -> Result<Variables, HpgRemoteError> {
     let mut vars = Variables::default();
     for f in inventory.vars_files.iter() {
-        vars = vars.merge(Variables::from_file(&f)?)?;
+        vars = vars.merge(Variables::from_file(f)?)?;
     }
     vars = vars.merge(Variables::from_map(&inventory.vars)?)?;
     if let Some(v) = host_config {
         for f in v.vars_files.iter() {
-            vars = vars.merge(Variables::from_file(&f)?)?;
+            vars = vars.merge(Variables::from_file(f)?)?;
         }
         vars = vars.merge(Variables::from_map(&v.vars)?)?;
     }
@@ -136,7 +136,7 @@ pub fn run_hpg_ssh(
         let client = Session::connect(ssh_config).await?;
         let process = client.start_remote(&remote_path, &remote_exe, sudo).await?;
         let socket = client.connect_socket(&root_dir, "/tmp/hpg.socket".to_string(), opt, vars);
-        let handle = tokio::spawn(async move { process.await });
+        let handle = tokio::spawn(process);
         socket.await?;
         handle.await.unwrap()?;
         client.close().await?;
@@ -177,7 +177,7 @@ impl Session {
                 .await;
             match res {
                 Ok(c) => return Ok(c),
-                Err(e) => {
+                Err(_e) => {
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             }
@@ -211,7 +211,7 @@ impl Session {
                         debug_output!("Remote process exited: {}", exit_status);
                         break;
                     }
-                    Some(ChannelMsg::ExtendedData { ref data, ext }) => {
+                    Some(ChannelMsg::ExtendedData { ref data, ext: _ }) => {
                         stderr_buf.put(&**data);
                         while let Some(line) = codec.decode(&mut stderr_buf).unwrap() {
                             debug_output!("E: {}", line);
@@ -316,7 +316,7 @@ async fn sync_files(channel: &mut Channel<Msg>, root_path: &Path) -> Result<(), 
     let reader = channel.make_reader();
     let bus = SyncBus::new(reader, writer);
     let bus = bus.pin();
-    let local_files = client::find_hpg_files(&root_path)?;
+    let local_files = client::find_hpg_files(root_path)?;
     bus.tx(SyncClientMessage::FileList(local_files)).await?;
     let msg = bus.rx().await?;
     let mut patches = HashSet::new();
@@ -453,8 +453,7 @@ fn default_ssh_config(host: &str) -> Option<russh_config::Config> {
         .ok()
         .map(|dir| dir.join("config"))
         .filter(|file| file.exists() && file.is_file())
-        .map(|file| russh_config::parse_path(&file, host).ok())
-        .flatten()
+        .and_then(|file| russh_config::parse_path(file, host).ok())
 }
 
 fn default_ssh_identity() -> Option<String> {

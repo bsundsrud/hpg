@@ -1,5 +1,5 @@
 use crate::error::{self, TaskError};
-use crate::indent_output;
+
 
 use mlua::{IntoLua, Lua, Table};
 use nix::unistd::{Gid, Group, Uid, User};
@@ -77,7 +77,7 @@ pub(crate) fn run_chown_recursive(
 ) -> Result<(), mlua::Error> {
     run_chown(p, user, group)?;
     if p.is_dir() {
-        for ent in std::fs::read_dir(&p)? {
+        for ent in std::fs::read_dir(p)? {
             let ent = ent?;
             let ty = ent.file_type()?;
             if ty.is_dir() {

@@ -39,9 +39,9 @@ fn running_as_sudo() -> (bool, Uid, Gid) {
         let sudo_uid = Uid::from(uid);
         if current_uid != sudo_uid {
             let gid: u32 = std::env::var("SUDO_GID").unwrap().parse().unwrap();
-            return (true, sudo_uid, Gid::from(gid));
+            (true, sudo_uid, Gid::from(gid))
         } else {
-            return (false, current_uid, current_gid);
+            (false, current_uid, current_gid)
         }
     } else {
         (is_root, current_uid, current_gid)
@@ -81,7 +81,7 @@ async fn listen_socket(
     }
     let listener = UnixListener::bind(socket_path)?;
     if let (true, uid, gid) = running_as_sudo() {
-        std::os::unix::fs::chown(&socket_path, Some(uid.as_raw()), Some(gid.as_raw())).unwrap();
+        std::os::unix::fs::chown(socket_path, Some(uid.as_raw()), Some(gid.as_raw())).unwrap();
     }
 
     // should wait for client to connect
@@ -124,7 +124,7 @@ async fn server_sync<R: AsyncRead + AsyncWrite + Unpin>(
         let msg = msg?;
         match msg {
             HpgMessage::SyncClient(SyncClientMessage::FileList(list)) => {
-                let info = check_dir(&root_dir, &list)?;
+                let info = check_dir(root_dir, &list)?;
                 rw.send(HpgMessage::SyncServer(SyncServerMessage::FileStatus(info)))
                     .await?;
                 rw.send(debug("sent file status")).await?;
@@ -160,7 +160,7 @@ async fn server_sync<R: AsyncRead + AsyncWrite + Unpin>(
 }
 
 async fn server_exec_hpg(
-    root_dir: &Path,
+    _root_dir: &Path,
     lua: LuaState,
     mut rw: Framed<UnixStream, HpgCodec<HpgMessage>>,
 ) -> Result<(), HpgRemoteError> {
@@ -173,7 +173,7 @@ async fn server_exec_hpg(
             list_tasks,
             targets,
         } => {
-            tracker::sink().into_remote(rw);
+            tracker::sink().to_remote(rw);
             if let Err(e) = execute_hpg(
                 lua,
                 config,
@@ -187,7 +187,7 @@ async fn server_exec_hpg(
             {
                 output!("Remote error: {}", e);
             }
-            rw = tracker::sink().into_local().unwrap();
+            rw = tracker::sink().to_local().unwrap();
         }
         _ => unreachable!(),
     }
@@ -257,7 +257,7 @@ fn apply_patch(path: &Path, patch: &[u8]) -> Result<(), HpgRemoteError> {
             .write(true)
             .create_new(true)
             .open(&temp_path)?;
-        let orig_file = std::fs::File::open(&path)?;
+        let orig_file = std::fs::File::open(path)?;
         let mut reader = BufReader::new(orig_file);
         let mut patch_reader = BufReader::new(patch);
         let mut writer = BufWriter::new(temp_file);
@@ -265,7 +265,7 @@ fn apply_patch(path: &Path, patch: &[u8]) -> Result<(), HpgRemoteError> {
         whole::patch(&mut reader, &mut patch_reader, &mut writer)?;
     }
     std::fs::remove_file(path)?;
-    std::fs::rename(&temp_path, &path)?;
+    std::fs::rename(&temp_path, path)?;
     Ok(())
 }
 

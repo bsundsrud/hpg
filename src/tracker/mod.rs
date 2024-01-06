@@ -1,25 +1,22 @@
 use std::{
-    any::Any,
     fmt::{Arguments, Debug},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex, Once, OnceLock, RwLock,
+        Arc, Mutex, OnceLock, RwLock,
     },
     thread::JoinHandle,
-    time::{Duration, Instant},
 };
 
-use console::{style, Term};
+
 use crossbeam::channel::{self, unbounded};
 use futures_util::SinkExt;
-use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressStyle};
+
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use tokio::{net::UnixStream, runtime::Handle};
+use tokio::{net::UnixStream};
 use tokio_util::codec::Framed;
 
 use crate::{
-    error::HpgRemoteError,
     remote::{
         codec::HpgCodec,
         messages::{ExecServerMessage, HpgMessage},
@@ -221,12 +218,12 @@ impl EventSink {
      * I hope busywaiting here works okay
      */
     fn wait_for_drain(&self) {
-        while self.rx.len() > 0 {
+        while !self.rx.is_empty() {
             println!("waiting");
         }
     }
 
-    pub fn into_remote(&self, writer: Framed<UnixStream, HpgCodec<HpgMessage>>) {
+    pub fn to_remote(&self, writer: Framed<UnixStream, HpgCodec<HpgMessage>>) {
         self.wait_for_drain();
         let output = &mut *self.output.write().unwrap();
         let debug = output.debug();
@@ -237,7 +234,7 @@ impl EventSink {
         *output = SinkType::Remote(remote);
     }
 
-    pub fn into_local(&self) -> Option<Framed<UnixStream, HpgCodec<HpgMessage>>> {
+    pub fn to_local(&self) -> Option<Framed<UnixStream, HpgCodec<HpgMessage>>> {
         self.wait_for_drain();
         let out = &mut *self.output.write().unwrap();
         let local = PrettyTracker::new();
@@ -318,9 +315,9 @@ impl EventWriter for PrettyTracker {
         match ev {
             TrackerEvent::Println { msg, indent } => {
                 if let Some(i) = indent {
-                    self.indent_println(*i, &msg);
+                    self.indent_println(*i, msg);
                 } else {
-                    self.println(&msg);
+                    self.println(msg);
                 }
             }
             TrackerEvent::Debug(msg) => {
