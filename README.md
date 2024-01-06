@@ -13,21 +13,63 @@ See the [reference](docs/reference.md) for the Lua API and guide.
 
 ## Usage
 
+### Top-level command
+
 ```
-hpg 0.1.0
-config management tool
+Usage: hpg [OPTIONS] [COMMAND]
 
-USAGE:
-    hpg [FLAGS] [OPTIONS] [TARGETS]...
+Commands:
+  local  Run HPG Locally
+  ssh    Run HPG over SSH
+  help   Print this message or the help of the given subcommand(s)
 
-FLAGS:
-    -D, --default-targets    Run default targets in config
-    -h, --help               Prints help information
-    -V, --version            Prints version information
+Options:
+      --lsp-defs      Output LSP definitions for HPG to .meta/hpgdefs.lua.  Compatible with EmmyLua and lua-language-server.
+      --raw-lsp-defs  Output LSP definitions for HPG to stdout.  Compatible with EmmyLua and lua-language-server.
+      --debug         Show debug output
+  -h, --help          Print help
+  -V, --version       Print version
+```
 
-OPTIONS:
-    -c, --config <CONFIG>    Path to hpg config file [default: hpg.lua]
+### Run locally
 
-ARGS:
-    <TARGETS>...    Task names to run
+```
+Usage: hpg local [OPTIONS] [TARGETS]...
+
+Arguments:
+  [TARGETS]...  Task names to run
+
+Options:
+  -c, --config <CONFIG>            Path to hpg config file, relative to project-dir [default: hpg.lua]
+  -p, --project-dir <PROJECT_DIR>  Path to project root. Default is the current directory [default: .]
+  -D, --default-targets            Run default targets in config
+  -v, --var <KEY=VALUE>            Key-value pairs to add as variables
+      --vars <VARS-FILE>           Path to JSON variables file
+  -s, --show                       Show planned execution but do not execute
+  -l, --list                       Show available targets
+  -h, --help                       Print help
+  -V, --version                    Print version
+```
+
+### Run Remotely via SSH
+(currently only supports private key auth)
+
+```
+Usage: hpg ssh [OPTIONS] <[USER@]HOST[:PORT]> [TARGETS]...
+
+Arguments:
+  <[USER@]HOST[:PORT]>  Remote host address
+  [TARGETS]...          Task names to run
+
+Options:
+  -i, --inventory <INVENTORY>      Path to inventory file
+  -c, --config <CONFIG>            Path to hpg config file, relative to project-dir [default: hpg.lua]
+  -p, --project-dir <PROJECT_DIR>  Path to project root. Default is the current directory [default: .]
+  -D, --default-targets            Run default targets in config
+  -v, --var <KEY=VALUE>            Key-value pairs to add as variables
+      --vars <VARS-FILE>           Path to JSON variables file
+  -s, --show                       Show planned execution but do not execute
+  -l, --list                       Show available targets
+  -h, --help                       Print help
+  -V, --version                    Print version
 ```

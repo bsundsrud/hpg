@@ -13,7 +13,7 @@ use crate::{
         comms::SyncBus,
         messages::{FileStatus, HpgMessage},
     },
-    task::{Variables},
+    task::Variables,
     tracker::{self, Tracker, TrackerEvent},
     HpgOpt,
 };
@@ -29,14 +29,14 @@ use russh::{
 use russh_keys::{key, load_secret_key};
 
 use std::{
-    collections::{HashSet},
+    collections::HashSet,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
 use tokio::{
     fs::File,
-    io::{AsyncReadExt},
+    io::AsyncReadExt,
     time::timeout,
 };
 use tokio_util::codec::{Decoder, LinesCodec};

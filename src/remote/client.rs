@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use ignore::{
-    overrides::{OverrideBuilder},
+    overrides::OverrideBuilder,
     WalkBuilder,
 };
 use pathdiff::diff_paths;

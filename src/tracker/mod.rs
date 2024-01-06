@@ -13,15 +13,13 @@ use futures_util::SinkExt;
 
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use tokio::{net::UnixStream};
+use tokio::net::UnixStream;
 use tokio_util::codec::Framed;
 
-use crate::{
-    remote::{
+use crate::remote::{
         codec::HpgCodec,
         messages::{ExecServerMessage, HpgMessage},
-    },
-};
+    };
 
 use self::local::PrettyTracker;
 pub mod local;

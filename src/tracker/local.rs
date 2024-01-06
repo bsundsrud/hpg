@@ -1,5 +1,5 @@
 use std::{
-    fmt::{Debug},
+    fmt::Debug,
     sync::{
         atomic::{AtomicBool, Ordering},
         Mutex,
