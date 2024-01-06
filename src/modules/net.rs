@@ -75,8 +75,7 @@ impl UserData for HpgUrl {
 
             HpgUrl::validate_response(&res, &opts)?;
 
-            res
-                .text()
+            res.text()
                 .map_err(|e| error::action_error(format!("Body error: {}", e)))
         });
 

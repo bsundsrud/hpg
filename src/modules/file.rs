@@ -45,10 +45,10 @@ impl UserData for HpgFile {
         });
 
         methods.add_method("contents", |_, this, _: ()| {
-            output!("file_contents {}", &this.path.to_string_lossy());
+            output!("contents {}", &this.path.to_string_lossy());
 
             let contents = util::read_file(&this.path).map_err(error::io_error)?;
-            Ok(contents)
+            Ok(String::from_utf8_lossy(&contents).to_string())
         });
         methods.add_method("exists", |_, this, _: ()| {
             let exists = this.path.exists();
@@ -62,8 +62,21 @@ impl UserData for HpgFile {
             let user: Option<mlua::Value> = opts.get("user")?;
             let group: Option<mlua::Value> = opts.get("group")?;
             output!("Chown {}:", &this.path.to_string_lossy());
+            let uid = user
+                .map(|u| util::uid_for_value(&u))
+                .map_or(Ok(None), |v| v.map(Some))?; // Flip Option<Result<_, _>> to Result<Option<_>, _>
+            let gid = group
+                .map(|u| util::gid_for_value(&u))
+                .map_or(Ok(None), |v| v.map(Some))?; // Flip Option<Result<_, _>> to Result<Option<_>, _>
 
-            util::run_chown(&this.path, user, group)?;
+            util::run_chown(&this.path, uid, gid)?;
+            if let Some(uid) = uid {
+                indent_output!(1, "uid: {}", uid);
+            }
+            if let Some(gid) = gid {
+                indent_output!(1, "gid: {}", gid);
+            }
+
             Ok(HpgFile::new(&this.path))
         });
         methods.add_method("chmod", |_, this, mode: String| {
@@ -81,7 +94,11 @@ impl UserData for HpgFile {
             let src_contents = util::read_file(&this.path).map_err(error::io_error)?;
             let cwd = Path::new(".");
             let dst = cwd.join(dst);
-
+            let dst = if dst.is_dir() {
+                dst.join(this.path.file_name().unwrap())
+            } else {
+                dst
+            };
             output!(
                 "copy {} to {}",
                 &this.path.to_string_lossy(),
@@ -95,9 +112,7 @@ impl UserData for HpgFile {
                     .truncate(true)
                     .open(&dst)
                     .map_err(error::io_error)?;
-                outfile
-                    .write_all(src_contents.as_bytes())
-                    .map_err(error::io_error)?;
+                outfile.write_all(&src_contents).map_err(error::io_error)?;
                 true
             } else {
                 indent_output!(1, "files matched, skipped");
@@ -126,7 +141,9 @@ impl UserData for HpgFile {
                 let src_contents =
                     run_template_file(&this.path, template_context).map_err(error::task_error)?;
 
-                let updated = if should_update_file(&dst, &src_contents).map_err(error::io_error)? {
+                let updated = if should_update_file(&dst, src_contents.as_bytes())
+                    .map_err(error::io_error)?
+                {
                     let mut outfile = OpenOptions::new()
                         .write(true)
                         .create(true)
@@ -181,7 +198,10 @@ impl UserData for HpgFile {
                     ))
                 }
                 (None, Some(s)) => s,
-                (Some(path), None) => util::read_file(Path::new(&path)).map_err(error::io_error)?,
+                (Some(path), None) => String::from_utf8_lossy(
+                    &util::read_file(Path::new(&path)).map_err(error::io_error)?,
+                )
+                .to_string(),
                 (Some(_), Some(_)) => {
                     return Err(error::action_error(
                         "append: Must specify only one of 'src' or 'contents'",
@@ -191,7 +211,7 @@ impl UserData for HpgFile {
             let marker = opts
                 .get::<_, Option<String>>("marker")?
                 .ok_or_else(|| error::action_error("append: 'marker' is required"))?;
-            let content_hash = hash::content_hash(&input);
+            let content_hash = hash::content_hash(input.as_bytes());
             let updated = append_to_existing(&this.path, &marker, &input, &content_hash)?;
             Ok(updated)
         });
@@ -208,7 +228,10 @@ impl UserData for HpgFile {
                     ))
                 }
                 (None, Some(s)) => s,
-                (Some(path), None) => util::read_file(Path::new(&path)).map_err(error::io_error)?,
+                (Some(path), None) => String::from_utf8_lossy(
+                    &util::read_file(Path::new(&path)).map_err(error::io_error)?,
+                )
+                .to_string(),
                 (Some(_), Some(_)) => {
                     return Err(error::action_error(
                         "append: Must specify only one of 'src' or 'contents'",
@@ -228,7 +251,7 @@ impl UserData for HpgFile {
                 .map_err(|e| error::action_error(format!("Unable to parse context: {}", e)))?;
             let input = run_template(&input, template_context)
                 .map_err(|e| error::action_error(e.to_string()))?;
-            let content_hash = hash::content_hash(&input);
+            let content_hash = hash::content_hash(input.as_bytes());
             let updated = append_to_existing(&this.path, &marker, &input, &content_hash)?;
             Ok(updated)
         });
@@ -273,9 +296,28 @@ impl UserData for HpgDir {
         methods.add_method("chown", |_, this, opts: Table| {
             let user: Option<mlua::Value> = opts.get("user")?;
             let group: Option<mlua::Value> = opts.get("group")?;
-            output!("Chown {}:", &this.path.to_string_lossy());
+            let recursive: Option<bool> = opts.get("recursive")?;
+            let recursive = recursive.unwrap_or(false);
+            let uid = user
+                .map(|u| util::uid_for_value(&u))
+                .map_or(Ok(None), |v| v.map(Some))?; // Flip Option<Result<_, _>> to Result<Option<_>, _>
+            let gid = group
+                .map(|u| util::gid_for_value(&u))
+                .map_or(Ok(None), |v| v.map(Some))?; // Flip Option<Result<_, _>> to Result<Option<_>, _>
 
-            util::run_chown(&this.path, user, group)?;
+            if recursive {
+                output!("Chown {} (recursive):", &this.path.to_string_lossy());
+                util::run_chown_recursive(&this.path, uid, gid)?;
+            } else {
+                output!("Chown {}:", &this.path.to_string_lossy());
+                util::run_chown(&this.path, uid, gid)?;
+            }
+            if let Some(uid) = uid {
+                indent_output!(1, "uid: {}", uid);
+            }
+            if let Some(gid) = gid {
+                indent_output!(1, "gid: {}", gid);
+            }
             Ok(HpgFile::new(&this.path))
         });
         methods.add_method("chmod", |_, this, mode_str: String| {
@@ -310,6 +352,27 @@ impl UserData for HpgDir {
             symlink(&this.path, &dst).map_err(error::io_error)?;
             Ok(HpgFile::new(dst))
         });
+
+        methods.add_method("copy", |_, this, dst: String| {
+            output!("Copy directory {} to {}", this.path.to_string_lossy(), dst);
+            let last_segment = this.path.file_name().unwrap();
+            let dst_path = PathBuf::from(&dst).join(last_segment);
+            copy_dir_all(&this.path, &dst_path)?;
+
+            Ok(HpgDir::new(dst_path))
+        });
+
+        methods.add_method("copy_contents", |_, this, dst: String| {
+            output!(
+                "Copy directory contents from {} to {}",
+                this.path.to_string_lossy(),
+                dst
+            );
+            copy_dir_all(&this.path, &dst)?;
+
+            Ok(HpgDir::new(dst))
+        });
+
         methods.add_meta_method(MetaMethod::ToString, |_, this, _: ()| {
             Ok(this.path.to_string_lossy().to_string())
         });
@@ -322,6 +385,27 @@ impl UserData for HpgDir {
             Ok(joined)
         });
     }
+}
+
+fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {
+    std::fs::create_dir_all(&dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            let src_contents = util::read_file(&entry.path())?;
+            let dst_file = dst.as_ref().join(entry.file_name());
+            if should_update_file(&dst_file, &src_contents)? {
+                std::fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+                indent_output!(1, "Updating file {}", dst_file.to_string_lossy());
+            } else {
+                indent_output!(1, "{} is up-to-date.", dst_file.to_string_lossy());
+            }
+        }
+    }
+    Ok(())
 }
 
 pub fn file(lua: &Lua) -> Result<(), TaskError> {
@@ -402,7 +486,8 @@ fn append_to_existing(
             .map_err(error::io_error)?;
         updated = true;
     } else {
-        let mut target_contents = util::read_file(dst).map_err(error::io_error)?;
+        let mut target_contents =
+            String::from_utf8_lossy(&util::read_file(dst).map_err(error::io_error)?).to_string();
         if target_contents.contains(marker) {
             // we've already got a section, check if it needs updates
             let mut found_start = false;
@@ -469,7 +554,7 @@ fn append_to_existing(
     Ok(updated)
 }
 
-fn should_update_file(dst: &Path, contents: &str) -> Result<bool, std::io::Error> {
+fn should_update_file(dst: &Path, contents: &[u8]) -> Result<bool, std::io::Error> {
     if !dst.exists() || !dst.is_file() {
         Ok(true)
     } else {
@@ -480,7 +565,7 @@ fn should_update_file(dst: &Path, contents: &str) -> Result<bool, std::io::Error
 fn run_template_file(tmpl_path: &Path, context: serde_json::Value) -> Result<String, TaskError> {
     let ctx = tera::Context::from_value(context)
         .map_err(|e| TaskError::Action(format!("Invalid context: {}", e)))?;
-    let tmpl_contents = util::read_file(tmpl_path)?;
+    let tmpl_contents = String::from_utf8_lossy(&util::read_file(tmpl_path)?).to_string();
     let rendered = tera::Tera::one_off(&tmpl_contents, &ctx, false).map_err(TaskError::Template)?;
     Ok(rendered)
 }

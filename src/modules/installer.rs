@@ -86,7 +86,7 @@ impl HpgInstaller {
         if self.install_dir().exists() {
             let hash_file = self.install_dir().join(".hpg-hash");
             let contents = if let Ok(c) = util::read_file(&hash_file) {
-                c
+                String::from_utf8_lossy(&c).to_string()
             } else {
                 return false;
             };

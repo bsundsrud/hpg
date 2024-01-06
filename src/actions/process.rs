@@ -4,7 +4,7 @@ use console::style;
 use mlua::{Lua, Table};
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::runtime::Builder;
+
 use tokio::select;
 
 use super::util::exit_status;
@@ -43,62 +43,66 @@ fn exec_streaming_process(
     p.stderr(Stdio::piped());
     p.stdin(Stdio::null());
 
-    let rt = Builder::new_multi_thread()
-        .enable_all()
-        .thread_name("process-exec")
-        .build()
-        .expect("Could not build runtime");
-    let handle = rt.handle().clone();
-    let output = rt.block_on(async move {
-        let mut child = p.spawn().map_err(io_error)?;
+    let handle = std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()?;
+        let handle = rt.handle();
+        let _ = handle.enter();
+        let output = rt.block_on(async move {
+            let mut child = p.spawn().map_err(io_error)?;
 
-        let mut out_reader =
-            BufReader::new(child.stdout.take().expect("Could not open stdout on child")).lines();
-        let mut err_reader =
-            BufReader::new(child.stderr.take().expect("Could not open stderr on child")).lines();
+            let mut out_reader =
+                BufReader::new(child.stdout.take().expect("Could not open stdout on child"))
+                    .lines();
+            let mut err_reader =
+                BufReader::new(child.stderr.take().expect("Could not open stderr on child"))
+                    .lines();
 
-        let join_handle = handle.spawn(async move { child.wait().await.map_err(io_error) });
-        let mut stdout_lines = Vec::new();
-        let mut stderr_lines = Vec::new();
-        loop {
-            select! {
-                maybe_line = out_reader.next_line() => {
-                    if let Some(line) = maybe_line? {
-                        if capture_stdout {
-                            if echo {
-                                indent_output!(1, "{}", line);
+            let join_handle = handle.spawn(async move { child.wait().await.map_err(io_error) });
+            let mut stdout_lines = Vec::new();
+            let mut stderr_lines = Vec::new();
+            loop {
+                select! {
+                    maybe_line = out_reader.next_line() => {
+                        if let Some(line) = maybe_line? {
+                            if capture_stdout {
+                                if echo {
+                                    indent_output!(1, "{}", line);
+                                }
+                                stdout_lines.push(line);
                             }
-                            stdout_lines.push(line);
+                        } else {
+                            break;
                         }
-                    } else {
-                        break;
-                    }
-                },
-                maybe_line = err_reader.next_line() => {
-                    if let Some(line) = maybe_line? {
-                        if capture_stderr {
-                            if echo {
-                                indent_output!(1, "{}", style(&line).yellow());
+                    },
+                    maybe_line = err_reader.next_line() => {
+                        if let Some(line) = maybe_line? {
+                            if capture_stderr {
+                                if echo {
+                                    indent_output!(1, "{}", style(&line).yellow());
+                                }
+                                stderr_lines.push(line);
                             }
-                            stderr_lines.push(line);
+                        } else {
+                            break;
                         }
-                    } else {
-                        break;
-                    }
-                },
+                    },
+                }
             }
-        }
-        let res = join_handle.await.expect("Failed to join child")?;
-        let status = exit_status(&res);
-        let stdout = stdout_lines.join("\n");
-        let stderr = stderr_lines.join("\n");
-        Ok::<_, mlua::Error>(ProcessOutput {
-            status,
-            stdout,
-            stderr,
-        })
-    })?;
-    Ok(output)
+            let res = join_handle.await.expect("Failed to join child")?;
+            let status = exit_status(&res);
+            let stdout = stdout_lines.join("\n");
+            let stderr = stderr_lines.join("\n");
+            Ok::<_, mlua::Error>(ProcessOutput {
+                status,
+                stdout,
+                stderr,
+            })
+        })?;
+        Ok(output)
+    });
+    handle.join().unwrap()
 }
 
 #[allow(dead_code)]

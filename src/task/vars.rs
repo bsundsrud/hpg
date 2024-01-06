@@ -1,8 +1,15 @@
+use std::{collections::HashMap};
+
+use anyhow::{anyhow, Context};
 use mlua::{Lua, MetaMethod, UserData, Value};
+use serde::{Deserialize, Serialize};
 
-use crate::{actions::util, error};
+use crate::{
+    actions::util,
+    error::{self},
+};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Variables {
     raw: serde_json::Value,
 }
@@ -12,11 +19,24 @@ impl Variables {
         Variables { raw: json }
     }
 
+    pub fn from_map(map: &HashMap<String, String>) -> Result<Variables, serde_json::Error> {
+        let json = serde_json::to_value(map)?;
+        Ok(Variables::from_json(json))
+    }
+
+    pub fn from_file(f: &str) -> Result<Variables, anyhow::Error> {
+        let s = crate::load_file(f)?;
+        let json = serde_json::from_str(&s).with_context(|| format!("File: {}", f))?;
+        Ok(Variables::from_json(json))
+    }
+
     fn get_from_raw(&self, key: &str) -> Result<Option<&serde_json::Value>, mlua::Error> {
         if let serde_json::Value::Object(ref o) = self.raw {
             Ok(o.get(key))
         } else {
-            Err(error::action_error("Invalid variables type, must be a JSON Object".to_string()))
+            Err(error::action_error(
+                "Invalid variables type, must be a JSON Object".to_string(),
+            ))
         }
     }
 
@@ -51,6 +71,36 @@ impl Variables {
     ) -> Result<(), mlua::Error> {
         ctx.set_named_registry_value(key, val)?;
         Ok(())
+    }
+
+    pub fn merge(self, other: Variables) -> Result<Variables, anyhow::Error> {
+        let raw = merge_objects(self.raw, other.raw)?;
+        Ok(Variables::from_json(raw))
+    }
+}
+
+impl Default for Variables {
+    fn default() -> Self {
+        Self {
+            raw: serde_json::Value::Object(serde_json::Map::new()),
+        }
+    }
+}
+
+fn merge_objects(
+    left: serde_json::Value,
+    right: serde_json::Value,
+) -> Result<serde_json::Value, anyhow::Error> {
+    use serde_json::Value;
+
+    match (left, right) {
+        (Value::Object(mut left), Value::Object(mut right)) => {
+            left.append(&mut right);
+            Ok(Value::Object(left))
+        }
+        _ => {
+            Err(anyhow!("Only JSON Objects can be merged"))
+        }
     }
 }
 

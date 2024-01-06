@@ -1,5 +1,5 @@
 use std::{
-    fmt::Arguments,
+    fmt::{Debug},
     sync::{
         atomic::{AtomicBool, Ordering},
         Mutex,
@@ -9,28 +9,28 @@ use std::{
 
 use console::{style, Term};
 use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressStyle};
-use lazy_static::lazy_static;
 
+#[derive(Debug)]
 pub struct PrettyTracker {
-    debug: AtomicBool,
     console: Term,
     bars: MultiProgress,
     run_bar: Mutex<Option<ProgressBar>>,
     current_task: Mutex<Option<String>>,
     started: Mutex<Option<Instant>>,
+    debug: AtomicBool,
 }
 
 impl PrettyTracker {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let bars = MultiProgress::new();
         bars.set_alignment(indicatif::MultiProgressAlignment::Top);
         Self {
-            debug: AtomicBool::new(false),
             console: Term::stdout(),
             bars,
             run_bar: Mutex::new(None),
             current_task: Mutex::new(None),
             started: Mutex::new(None),
+            debug: AtomicBool::new(false),
         }
     }
 
@@ -38,27 +38,28 @@ impl PrettyTracker {
         self.debug.store(debug, Ordering::SeqCst)
     }
 
-    pub fn debug_println(&self, args: Arguments) {
-        if self.debug.load(Ordering::SeqCst) {
-            self.bars.suspend(|| {
-                self.console
-                    .write_line(&style(args.to_string()).yellow().dim().to_string())
-                    .unwrap();
-            });
-        }
+    pub fn debug(&self) -> bool {
+        self.debug.load(Ordering::Relaxed)
     }
 
-    pub fn println(&self, args: Arguments) {
+    pub fn debug_println(&self, msg: &str) {
         self.bars.suspend(|| {
-            self.console.write_line(&args.to_string()).unwrap();
+            self.console
+                .write_line(&style(msg).yellow().dim().to_string())
+                .unwrap();
         });
     }
 
-    pub fn indent_println(&self, indent: usize, args: Arguments) {
-        let s = args.to_string();
+    pub fn println(&self, msg: &str) {
+        self.bars.suspend(|| {
+            self.console.write_line(msg).unwrap();
+        });
+    }
+
+    pub fn indent_println(&self, indent: usize, msg: &str) {
         let indent_str = " ".repeat(indent * 2);
         let mut lines = Vec::new();
-        for line in s.lines() {
+        for line in msg.lines() {
             lines.push(format!("{}{}", indent_str, line));
         }
 
@@ -67,18 +68,47 @@ impl PrettyTracker {
             .suspend(|| self.console.write_line(&output).unwrap());
     }
 
-    pub fn task<S: Into<String>>(&self, msg: S) {
-        let m = msg.into();
-        *self.current_task.lock().unwrap() = Some(m.clone());
+    pub fn task(&self, msg: String) {
+        *self.current_task.lock().unwrap() = Some(msg.clone());
         if let Some(rb) = &*self.run_bar.lock().unwrap() {
-            rb.set_message(m);
+            rb.set_message(msg);
         }
     }
 
-    pub fn run(&self, count: u64) {
+    pub fn progressbar(&self, count: usize) {
         let mut rb = self.run_bar.lock().unwrap();
         if rb.is_none() {
-            let bar = ProgressBar::new(count).with_style(
+            let bar = ProgressBar::new(count as u64).with_style(
+                ProgressStyle::with_template("[{pos}/{len}] ({elapsed}) {spinner} {msg}").unwrap(),
+            );
+
+            bar.enable_steady_tick(Duration::from_millis(200));
+            self.bars.add(bar.clone());
+            *rb = Some(bar);
+        }
+        *self.started.lock().unwrap() = Some(Instant::now());
+    }
+
+    pub fn progressbar_progress(&self, msg: String) {
+        if let Some(rb) = &*self.run_bar.lock().unwrap() {
+            rb.set_message(msg);
+            rb.inc(1);
+        }
+    }
+
+    pub fn progressbar_finish(&self, msg: String) {
+        let opt = &mut *self.run_bar.lock().unwrap();
+        if let Some(rb) = opt {
+            rb.finish_and_clear();
+        }
+        self.println(&msg);
+        *opt = None;
+    }
+
+    pub fn run(&self, count: usize) {
+        let mut rb = self.run_bar.lock().unwrap();
+        if rb.is_none() {
+            let bar = ProgressBar::new(count as u64).with_style(
                 ProgressStyle::with_template("[{pos}/{len}] ({elapsed}) {spinner} {msg}").unwrap(),
             );
 
@@ -162,8 +192,4 @@ impl PrettyTracker {
             println!("{}", msg);
         }
     }
-}
-
-lazy_static! {
-    pub static ref TRACKER: PrettyTracker = PrettyTracker::new();
 }

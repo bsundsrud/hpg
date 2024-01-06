@@ -6,7 +6,7 @@ use crate::{hash, output, Result};
 use super::util;
 pub fn hash_text(lua: &Lua) -> Result<(), TaskError> {
     let f = lua.create_function(|_, text: String| {
-        let h = hash::content_hash(&text);
+        let h = hash::content_hash(text.as_bytes());
         Ok(h)
     })?;
     lua.globals().set("hash", f)?;

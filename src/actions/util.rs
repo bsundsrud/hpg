@@ -1,5 +1,5 @@
 use crate::error::{self, TaskError};
-use crate::{indent_output};
+
 
 use mlua::{IntoLua, Lua, Table};
 use nix::unistd::{Gid, Group, Uid, User};
@@ -8,11 +8,11 @@ use std::os::unix::process::ExitStatusExt;
 use std::process::ExitStatus;
 use std::{convert::TryInto, fs::File, io::prelude::*, io::BufReader, path::Path};
 
-pub(crate) fn read_file(path: &Path) -> Result<String, std::io::Error> {
-    let mut contents = String::new();
+pub(crate) fn read_file(path: &Path) -> Result<Vec<u8>, std::io::Error> {
+    let mut contents = Vec::new();
     let f = File::open(path)?;
     let mut reader = BufReader::new(f);
-    reader.read_to_string(&mut contents)?;
+    reader.read_to_end(&mut contents)?;
     Ok(contents)
 }
 
@@ -32,11 +32,9 @@ pub(crate) fn gid_for_value(val: &mlua::Value) -> Result<Gid, mlua::Error> {
                 .ok_or_else(|| error::action_error(format!("gid for {} not found", name)))?;
             Ok(group.gid)
         }
-        _ => {
-            Err(error::action_error(
-                "invalid group type, must be string or integer",
-            ))
-        }
+        _ => Err(error::action_error(
+            "invalid group type, must be string or integer",
+        )),
     }
 }
 
@@ -56,40 +54,37 @@ pub(crate) fn uid_for_value(val: &mlua::Value) -> Result<Uid, mlua::Error> {
                 .ok_or_else(|| error::action_error(format!("uid for {} not found", name)))?;
             Ok(user.uid)
         }
-        _ => {
-            Err(error::action_error(
-                "invalid group type, must be string or integer",
-            ))
-        }
+        _ => Err(error::action_error(
+            "invalid group type, must be string or integer",
+        )),
     }
 }
 
 pub(crate) fn run_chown(
     p: &Path,
-    user: Option<mlua::Value>,
-    group: Option<mlua::Value>,
+    user: Option<Uid>,
+    group: Option<Gid>,
 ) -> Result<(), mlua::Error> {
-    match (user, group) {
-        (None, None) => {}
-        (None, Some(g)) => {
-            let gid = gid_for_value(&g)?;
-            nix::unistd::chown(p, None, Some(gid))
-                .map_err(|e| error::action_error(format!("chown: {}", e)))?;
-            indent_output!(1, "gid: {}", gid);
-        }
-        (Some(u), None) => {
-            let uid = uid_for_value(&u)?;
-            nix::unistd::chown(p, Some(uid), None)
-                .map_err(|e| error::action_error(format!("chown: {}", e)))?;
-            indent_output!(1, "uid: {}", uid);
-        }
-        (Some(u), Some(g)) => {
-            let uid = uid_for_value(&u)?;
-            let gid = gid_for_value(&g)?;
-            nix::unistd::chown(p, Some(uid), Some(gid))
-                .map_err(|e| error::action_error(format!("chown: {}", e)))?;
-            indent_output!(1, "uid: {}", uid);
-            indent_output!(1, "gid: {}", gid);
+    nix::unistd::chown(p, user, group)
+        .map_err(|e| error::action_error(format!("chown {}: {}", p.to_string_lossy(), e)))?;
+    Ok(())
+}
+
+pub(crate) fn run_chown_recursive(
+    p: &Path,
+    user: Option<Uid>,
+    group: Option<Gid>,
+) -> Result<(), mlua::Error> {
+    run_chown(p, user, group)?;
+    if p.is_dir() {
+        for ent in std::fs::read_dir(p)? {
+            let ent = ent?;
+            let ty = ent.file_type()?;
+            if ty.is_dir() {
+                run_chown_recursive(&ent.path(), user, group)?;
+            } else {
+                run_chown(&ent.path(), user, group)?;
+            }
         }
     }
     Ok(())
