@@ -167,6 +167,7 @@ pub(crate) fn exit_status(e: &ExitStatus) -> i32 {
     }
 }
 
+#[derive(Debug)]
 pub struct ProcessOutput {
     pub status: i32,
     pub stdout: String,

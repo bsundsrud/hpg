@@ -1,7 +1,8 @@
-use std::{collections::HashMap, ffi::OsStr, fmt::Debug};
+use std::{collections::HashMap, ffi::OsStr, fmt::Debug, time::Instant};
 
 use crate::{
     actions::util::{exec_streaming_process, ProcessOutput},
+    debug_output,
     error::TaskError,
     modules::packaging::{InstallStatus, Version},
 };
@@ -34,15 +35,26 @@ impl ArchManager {
             true,
             echo,
         )?;
+
+        Ok(output)
+    }
+
+    fn must_run_pkg_cmd<T: AsRef<OsStr> + Debug>(
+        &self,
+        args: &[T],
+        echo: bool,
+    ) -> Result<ProcessOutput, TaskError> {
+        let output = self.run_pkg_cmd(args, echo)?;
         if output.status != 0 {
             return Err(TaskError::Action(format!(
-                "Failed running {} {:?}:\n  stdout: {}\n  stderr: {}",
-                &self.manager, args, output.stdout, output.stderr
+                "Failed running {} {:?}, exit {}:\n  stdout: {}\n  stderr: {}",
+                &self.manager, args, output.status, output.stdout, output.stderr
             )));
         }
         Ok(output)
     }
 }
+
 fn parse_package_status(line: &str) -> Result<PackageStatus, TaskError> {
     if let Some((package, version)) = line.split_once(' ') {
         let status = PackageStatus {
@@ -60,49 +72,57 @@ fn parse_package_status(line: &str) -> Result<PackageStatus, TaskError> {
 
 impl PackageManager for ArchManager {
     fn call_update_repos(&self) -> crate::Result<(), TaskError> {
-        self.run_pkg_cmd(&["-Sy"], true)?;
+        self.must_run_pkg_cmd(&["-Sy"], true)?;
         Ok(())
     }
 
     fn package_status(&self, name: &str) -> Result<PackageStatus, TaskError> {
-        let native_output = self.run_pkg_cmd(&["-Qn", name], false)?;
-        let lines: Vec<String> = native_output
-            .stdout
-            .lines()
-            .map(|s| s.to_string())
-            .collect();
-        if lines.len() == 0 {
+        let started = Instant::now();
+        let output = self.run_pkg_cmd(&["-Qn", name], false)?;
+        let lines: Vec<String> = output.stdout.lines().map(|s| s.to_string()).collect();
+        if output.status == 1 && lines.len() == 0 {
             //skip, may be from AUR
         } else if lines.len() == 1 {
             let status = parse_package_status(&lines[0])?;
+            debug_output!(
+                "Checked package {} in {}ms",
+                name,
+                started.elapsed().as_millis()
+            );
             return Ok(status);
         } else {
             //didn't expect multiple lines here
             return Err(TaskError::Action(format!(
-                "received multiple package statuses for {}",
-                name
+                "received unexpected for {} -Qn {}:\n  stdout: {}\n  stderr: {}",
+                self.manager, name, output.stdout, output.stderr
             )));
         }
 
-        let foreign_output = self.run_pkg_cmd(&["-Qm", name], false)?;
-        let lines: Vec<String> = foreign_output
-            .stdout
-            .lines()
-            .map(|s| s.to_string())
-            .collect();
-        if lines.len() == 0 {
+        let output = self.run_pkg_cmd(&["-Qm", name], false)?;
+        let lines: Vec<String> = output.stdout.lines().map(|s| s.to_string()).collect();
+        if output.status == 1 && lines.len() == 0 {
+            debug_output!(
+                "Checked package {} in {}ms",
+                name,
+                started.elapsed().as_millis()
+            );
             return Ok(PackageStatus {
                 package: name.into(),
                 status: InstallStatus::NotInstalled,
             });
         } else if lines.len() == 1 {
             let status = parse_package_status(&lines[0])?;
+            debug_output!(
+                "Checked package {} in {}ms",
+                name,
+                started.elapsed().as_millis()
+            );
             return Ok(status);
         } else {
             //didn't expect multiple lines here
             return Err(TaskError::Action(format!(
-                "received multiple package statuses for {}",
-                name
+                "received unexpected for {} -Qn {}:\n  stdout: {}\n  stderr: {}",
+                self.manager, name, output.stdout, output.stderr
             )));
         }
     }
@@ -116,16 +136,18 @@ impl PackageManager for ArchManager {
         for p in packages {
             if let Some(v) = &p.version {
                 args.push(format!("{}={}", p.name, v.0));
+            } else {
+                args.push(p.name.clone());
             }
         }
-        self.run_pkg_cmd(&args, true)?;
+        self.must_run_pkg_cmd(&args, true)?;
         Ok(())
     }
 
     fn call_remove(&self, packages: &[&str]) -> Result<(), TaskError> {
         let mut args = vec!["-R", "--noconfirm"];
         args.extend_from_slice(packages);
-        self.run_pkg_cmd(&args, true)?;
+        self.must_run_pkg_cmd(&args, true)?;
         Ok(())
     }
 }
