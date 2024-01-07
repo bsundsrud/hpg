@@ -1,17 +1,23 @@
-use crate::error::{self, TaskError};
+use crate::error::{self, io_error, TaskError};
+use crate::tracker::Tracker;
+use crate::{indent_output, tracker};
 
-
+use console::style;
 use mlua::{IntoLua, Lua, Table};
 use nix::unistd::{Gid, Group, Uid, User};
 use serde_json::{Map, Value};
+use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::os::unix::process::ExitStatusExt;
-use std::process::ExitStatus;
-use std::{convert::TryInto, fs::File, io::prelude::*, io::BufReader, path::Path};
+use std::process::{ExitStatus, Stdio};
+use std::{convert::TryInto, fs::File, io::prelude::*, path::Path};
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::select;
 
 pub(crate) fn read_file(path: &Path) -> Result<Vec<u8>, std::io::Error> {
     let mut contents = Vec::new();
     let f = File::open(path)?;
-    let mut reader = BufReader::new(f);
+    let mut reader = std::io::BufReader::new(f);
     reader.read_to_end(&mut contents)?;
     Ok(contents)
 }
@@ -159,4 +165,147 @@ pub(crate) fn exit_status(e: &ExitStatus) -> i32 {
         Some(c) => c,
         None => 127 + e.signal().unwrap_or(0),
     }
+}
+
+pub struct ProcessOutput {
+    pub status: i32,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn exec_streaming_process<A, I, S>(
+    cmd: &str,
+    args: I,
+    inherit_env: bool,
+    env: HashMap<String, String>,
+    cwd: Option<A>,
+    capture_stdout: bool,
+    capture_stderr: bool,
+    echo: bool,
+) -> Result<ProcessOutput, mlua::Error>
+where
+    A: AsRef<Path>,
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut p = tokio::process::Command::new(cmd);
+    p.args(args);
+    if let Some(cwd) = cwd {
+        p.current_dir(cwd);
+    }
+
+    if !inherit_env {
+        p.env_clear();
+    }
+    p.envs(env);
+
+    p.stdout(Stdio::piped());
+    p.stderr(Stdio::piped());
+    p.stdin(Stdio::piped());
+    tracker::tracker().suspend_bars();
+    let handle = std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()?;
+        let handle = rt.handle();
+        let _ = handle.enter();
+        let output = rt.block_on(async move {
+            let mut child = p.spawn().map_err(io_error)?;
+
+            let mut out_reader =
+                BufReader::new(child.stdout.take().expect("Could not open stdout on child"))
+                    .lines();
+            let mut err_reader =
+                BufReader::new(child.stderr.take().expect("Could not open stderr on child"))
+                    .lines();
+
+            let join_handle = handle.spawn(async move { child.wait().await.map_err(io_error) });
+            let mut stdout_lines = Vec::new();
+            let mut stderr_lines = Vec::new();
+            loop {
+                select! {
+                    maybe_line = out_reader.next_line() => {
+                        if let Some(line) = maybe_line? {
+                            if capture_stdout {
+                                if echo {
+                                    indent_output!(1, "{}", line);
+                                }
+                                stdout_lines.push(line);
+                            }
+                        } else {
+                            break;
+                        }
+                    },
+                    maybe_line = err_reader.next_line() => {
+                        if let Some(line) = maybe_line? {
+                            if capture_stderr {
+                                if echo {
+                                    indent_output!(1, "{}", style(&line).yellow());
+                                }
+                                stderr_lines.push(line);
+                            }
+                        } else {
+                            break;
+                        }
+                    },
+                }
+            }
+            let res = join_handle.await.expect("Failed to join child")?;
+            let status = exit_status(&res);
+            let stdout = stdout_lines.join("\n");
+            let stderr = stderr_lines.join("\n");
+            Ok::<_, mlua::Error>(ProcessOutput {
+                status,
+                stdout,
+                stderr,
+            })
+        })?;
+        Ok(output)
+    });
+    let res = handle.join().unwrap();
+    tracker::tracker().resume_bars();
+    res
+}
+
+#[allow(dead_code)]
+fn exec_blocking_process(
+    cmd: String,
+    args: Vec<String>,
+    inherit_env: bool,
+    env: HashMap<String, String>,
+    cwd: Option<String>,
+    capture_stdout: bool,
+    capture_stderr: bool,
+) -> Result<ProcessOutput, mlua::Error> {
+    let mut p = std::process::Command::new(cmd);
+    p.args(args);
+    if let Some(cwd) = cwd {
+        p.current_dir(cwd);
+    }
+
+    if !inherit_env {
+        p.env_clear();
+    }
+    p.envs(env);
+    if capture_stdout {
+        p.stdout(Stdio::piped());
+    } else {
+        p.stdout(Stdio::null());
+    }
+    if capture_stderr {
+        p.stderr(Stdio::piped());
+    } else {
+        p.stderr(Stdio::null());
+    }
+
+    let output = p.output().map_err(io_error)?;
+    let status = exit_status(&output.status);
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    Ok(ProcessOutput {
+        status,
+        stdout,
+        stderr,
+    })
 }

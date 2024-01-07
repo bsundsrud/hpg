@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{error::TaskError, indent_output, output, task::TaskResult, Result};
 mod access;
 mod file;
-mod process;
+pub(crate) mod process;
 pub(crate) mod util;
 pub use access::{group, group_exists_action, user, user_exists_action};
 pub use file::{from_json, hash_text};

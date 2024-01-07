@@ -1,151 +1,11 @@
-use std::{collections::HashMap, io::prelude::*, process::Stdio};
+use std::{collections::HashMap, io::prelude::*};
 
-use console::style;
 use mlua::{Lua, Table};
 use tempfile::NamedTempFile;
-use tokio::io::{AsyncBufReadExt, BufReader};
 
-use tokio::select;
-
-use super::util::exit_status;
+use crate::actions::util::exec_streaming_process;
 use crate::error::{action_error, io_error, TaskError};
 use crate::{indent_output, output, Result};
-
-struct ProcessOutput {
-    status: i32,
-    stdout: String,
-    stderr: String,
-}
-
-#[allow(clippy::too_many_arguments)]
-fn exec_streaming_process(
-    cmd: String,
-    args: Vec<String>,
-    inherit_env: bool,
-    env: HashMap<String, String>,
-    cwd: Option<String>,
-    capture_stdout: bool,
-    capture_stderr: bool,
-    echo: bool,
-) -> Result<ProcessOutput, mlua::Error> {
-    let mut p = tokio::process::Command::new(cmd);
-    p.args(args);
-    if let Some(cwd) = cwd {
-        p.current_dir(cwd);
-    }
-
-    if !inherit_env {
-        p.env_clear();
-    }
-    p.envs(env);
-
-    p.stdout(Stdio::piped());
-    p.stderr(Stdio::piped());
-    p.stdin(Stdio::null());
-
-    let handle = std::thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()?;
-        let handle = rt.handle();
-        let _ = handle.enter();
-        let output = rt.block_on(async move {
-            let mut child = p.spawn().map_err(io_error)?;
-
-            let mut out_reader =
-                BufReader::new(child.stdout.take().expect("Could not open stdout on child"))
-                    .lines();
-            let mut err_reader =
-                BufReader::new(child.stderr.take().expect("Could not open stderr on child"))
-                    .lines();
-
-            let join_handle = handle.spawn(async move { child.wait().await.map_err(io_error) });
-            let mut stdout_lines = Vec::new();
-            let mut stderr_lines = Vec::new();
-            loop {
-                select! {
-                    maybe_line = out_reader.next_line() => {
-                        if let Some(line) = maybe_line? {
-                            if capture_stdout {
-                                if echo {
-                                    indent_output!(1, "{}", line);
-                                }
-                                stdout_lines.push(line);
-                            }
-                        } else {
-                            break;
-                        }
-                    },
-                    maybe_line = err_reader.next_line() => {
-                        if let Some(line) = maybe_line? {
-                            if capture_stderr {
-                                if echo {
-                                    indent_output!(1, "{}", style(&line).yellow());
-                                }
-                                stderr_lines.push(line);
-                            }
-                        } else {
-                            break;
-                        }
-                    },
-                }
-            }
-            let res = join_handle.await.expect("Failed to join child")?;
-            let status = exit_status(&res);
-            let stdout = stdout_lines.join("\n");
-            let stderr = stderr_lines.join("\n");
-            Ok::<_, mlua::Error>(ProcessOutput {
-                status,
-                stdout,
-                stderr,
-            })
-        })?;
-        Ok(output)
-    });
-    handle.join().unwrap()
-}
-
-#[allow(dead_code)]
-fn exec_blocking_process(
-    cmd: String,
-    args: Vec<String>,
-    inherit_env: bool,
-    env: HashMap<String, String>,
-    cwd: Option<String>,
-    capture_stdout: bool,
-    capture_stderr: bool,
-) -> Result<ProcessOutput, mlua::Error> {
-    let mut p = std::process::Command::new(cmd);
-    p.args(args);
-    if let Some(cwd) = cwd {
-        p.current_dir(cwd);
-    }
-
-    if !inherit_env {
-        p.env_clear();
-    }
-    p.envs(env);
-    if capture_stdout {
-        p.stdout(Stdio::piped());
-    } else {
-        p.stdout(Stdio::null());
-    }
-    if capture_stderr {
-        p.stderr(Stdio::piped());
-    } else {
-        p.stderr(Stdio::null());
-    }
-
-    let output = p.output().map_err(io_error)?;
-    let status = exit_status(&output.status);
-    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-    Ok(ProcessOutput {
-        status,
-        stdout,
-        stderr,
-    })
-}
 
 pub fn shell(lua: &Lua) -> Result<(), TaskError> {
     let f = lua.create_function(|ctx, (cmd, options): (String, Option<Table>)| {
@@ -177,9 +37,8 @@ pub fn shell(lua: &Lua) -> Result<(), TaskError> {
         temp_file.write_all(cmd.as_bytes()).map_err(io_error)?;
         let temp_path = temp_file.into_temp_path();
         sh_args.push(temp_path.to_str().unwrap().to_string());
-
         let output =
-            exec_streaming_process(sh, sh_args, inherit_env, env, cwd, stdout, stderr, echo)?;
+            exec_streaming_process(&sh, &sh_args, inherit_env, env, cwd, stdout, stderr, echo)?;
 
         let retval = ctx.create_table()?;
         retval.set("status", output.status)?;
@@ -225,7 +84,7 @@ pub fn exec(lua: &Lua) -> Result<(), TaskError> {
         let echo = opts.get::<_, Option<bool>>("echo")?.unwrap_or(true);
         let ignore_exit = opts.get::<_, Option<bool>>("ignore_exit")?.unwrap_or(false);
         let output =
-            exec_streaming_process(cmd, args, inherit_env, env, cwd, stdout, stderr, echo)?;
+            exec_streaming_process(&cmd, args, inherit_env, env, cwd, stdout, stderr, echo)?;
         let retval = ctx.create_table()?;
         retval.set("status", output.status)?;
         retval.set("stdout", output.stdout)?;

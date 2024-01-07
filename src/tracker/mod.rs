@@ -4,9 +4,9 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex, OnceLock, RwLock,
     },
-    thread::JoinHandle, time::Duration,
+    thread::JoinHandle,
+    time::Duration,
 };
-
 
 use crossbeam::channel::{self, unbounded};
 use futures_util::SinkExt;
@@ -17,9 +17,9 @@ use tokio::net::UnixStream;
 use tokio_util::codec::Framed;
 
 use crate::remote::{
-        codec::HpgCodec,
-        messages::{ExecServerMessage, HpgMessage},
-    };
+    codec::HpgCodec,
+    messages::{ExecServerMessage, HpgMessage},
+};
 
 use self::local::PrettyTracker;
 pub mod local;
@@ -38,6 +38,8 @@ pub trait Tracker {
     fn task_fail(&self);
     fn finish_success(&self);
     fn finish_fail(&self);
+    fn suspend_bars(&self);
+    fn resume_bars(&self);
 }
 
 lazy_static! {
@@ -87,6 +89,8 @@ pub enum TrackerEvent {
     ProgressStart(usize),
     ProgressInc(String),
     ProgressFinish(String),
+    SuspendBars,
+    ResumeBars,
     Exit,
 }
 
@@ -162,6 +166,14 @@ impl Tracker for EventSource {
 
     fn finish_fail(&self) {
         let _ = self.tx.send(TrackerEvent::TaskFail);
+    }
+
+    fn suspend_bars(&self) {
+        let _ = self.tx.send(TrackerEvent::SuspendBars);
+    }
+
+    fn resume_bars(&self) {
+        let _ = self.tx.send(TrackerEvent::ResumeBars);
     }
 }
 
@@ -334,6 +346,8 @@ impl EventWriter for PrettyTracker {
             TrackerEvent::ProgressInc(msg) => self.progressbar_progress(msg.clone()),
             TrackerEvent::ProgressFinish(msg) => self.progressbar_finish(msg.clone()),
             TrackerEvent::Exit => unreachable!("Exit should be handled in message pump"),
+            TrackerEvent::SuspendBars => self.suspend(),
+            TrackerEvent::ResumeBars => self.resume(),
         }
     }
     fn set_debug(&self, debug: bool) {

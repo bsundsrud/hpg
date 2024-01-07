@@ -2,7 +2,7 @@ use crate::error::TaskError;
 use crate::{indent_output, output, Result};
 
 pub(crate) mod apt;
-
+pub(crate) mod arch;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Version(pub String);
 

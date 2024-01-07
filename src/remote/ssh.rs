@@ -34,11 +34,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tokio::{
-    fs::File,
-    io::AsyncReadExt,
-    time::timeout,
-};
+use tokio::{fs::File, io::AsyncReadExt, time::timeout};
 use tokio_util::codec::{Decoder, LinesCodec};
 
 #[derive(Debug, Clone)]
@@ -297,6 +293,8 @@ async fn exec_hpg(
                 TrackerEvent::ProgressInc(m) => tracker::tracker().progressbar_progress(m),
                 TrackerEvent::ProgressFinish(m) => tracker::tracker().progressbar_finish(m),
                 TrackerEvent::Exit => unreachable!(),
+                TrackerEvent::SuspendBars => tracker::tracker().suspend_bars(),
+                TrackerEvent::ResumeBars => tracker::tracker().resume_bars(),
             },
             Some(HpgMessage::ExecServer(ExecServerMessage::Finish)) => break,
             Some(_) => {

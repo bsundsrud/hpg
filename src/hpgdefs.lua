@@ -214,18 +214,27 @@ end
 
 --- System-wide package management interface.
 ---@class pkg
----@field apt Apt
+---@field apt table System package management with apt-get
+---@field arch table System package management for archlinux (default pacman)
 pkg = {}
 
---- Apt-get packaging for Debian derivatives.
----@class Apt
 pkg.apt = {}
+---@class Arch
+---@field package_manager string Which package manager to invoke (default pacman)
+pkg.arch = {}
 
 --- Update repo list.
 --- Will only update repos once per HPG run unless `force` is `true`.
 ---@param force boolean? Force a repo update.
 ---@return boolean updated Whether or not the repos were updated.
 function pkg.apt.update(force)
+end
+
+--- Update repo list.
+--- Will only update repos once per HPG run unless `force` is `true`.
+---@param force boolean? Force a repo update.
+---@return boolean updated Whether or not the repos were updated.
+function pkg.arch.update(force)
 end
 
 --- (Name, Version) pair for package install requests.
@@ -251,16 +260,34 @@ end
 function pkg.apt.install(packages)
 end
 
+--- Install packages with `pkg.arch.package_manager`.
+---@param packages string[]|PackageInstall[] Packages to install.
+---@return PackageStatus status Status of requested packages.
+function pkg.arch.install(packages)
+end
+
 --- Current status of package.
 ---@param package string Package name.
 ---@return PackageStatus status Status of package.
 function pkg.apt.status(package)
 end
 
+--- Current status of package.
+---@param package string Package name.
+---@return PackageStatus status Status of package.
+function pkg.arch.status(package)
+end
+
 --- Remove packages from the system.
 ---@param packages string[] List of packages to remove.
 ---@return PackageStatus[] statuses List of statuses of removed packages.
 function pkg.apt.remove(packages)
+end
+
+--- Remove packages from the system.
+---@param packages string[] List of packages to remove.
+---@return PackageStatus[] statuses List of statuses of removed packages.
+function pkg.arch.remove(packages)
 end
 
 --- Output of Ensure command
@@ -272,6 +299,12 @@ end
 ---@param packages string[]|PackageInstall[] Packages to install.
 ---@return EnsureTable status Table with `updated` and `packages`. `updated` is true if installation was attempted, `packages` contains the packages sent to apt.
 function pkg.apt.ensure(packages)
+end
+
+--- Ensure all given packages are installed on a system.  If any are missing, it will call `pkg.arch.update(false)` and `pkg.arch.install(packages)`.
+---@param packages string[]|PackageInstall[] Packages to install.
+---@return EnsureTable status Table with `updated` and `packages`. `updated` is true if installation was attempted, `packages` contains the packages sent to the package manager.
+function pkg.arch.ensure(packages)
 end
 
 --- Pretty-prints the Lua value to stdout.
@@ -397,6 +430,7 @@ end
 machine = {}
 
 ---@type Uname
+---@diagnostic disable-next-line: missing-fields
 machine.uname = {}
 
 ---@alias ArchiveType

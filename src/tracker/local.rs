@@ -8,7 +8,7 @@ use std::{
 };
 
 use console::{style, Term};
-use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{HumanDuration, MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 
 #[derive(Debug)]
 pub struct PrettyTracker {
@@ -191,5 +191,14 @@ impl PrettyTracker {
             rb.finish_and_clear();
             println!("{}", msg);
         }
+    }
+
+    pub fn suspend(&self) {
+        self.bars.clear().unwrap();
+        self.bars.set_draw_target(ProgressDrawTarget::hidden());
+    }
+
+    pub fn resume(&self) {
+        self.bars.set_draw_target(ProgressDrawTarget::stderr());
     }
 }
