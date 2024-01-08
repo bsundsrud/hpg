@@ -1,6 +1,6 @@
 use crate::{
     error::{self, TaskError},
-    output, Result,
+    indent_output, output, Result,
 };
 use mlua::{Lua, Table};
 
@@ -93,19 +93,37 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
             .get::<_, Table>("pkg")?
             .get::<_, Table>("apt")?
             .get::<_, bool>("_updated")?;
+        output!(
+            "Ensure Packages: {}",
+            packages
+                .iter()
+                .map(|p| p.name.as_str())
+                .collect::<Vec<&str>>()
+                .join(", ")
+        );
         let (updated, statuses) = apt
             .ensure(&packages, !already_updated)
             .map_err(error::task_error)?;
         let res_tbl = ctx.create_table()?;
+        if !updated {
+            indent_output!(1, "Ensure: Packages all up-to-date.");
+        } else {
+            indent_output!(
+                1,
+                "Ensure: Installed {}",
+                statuses
+                    .iter()
+                    .map(|s| s.package.as_str())
+                    .collect::<Vec<&str>>()
+                    .join(", ")
+            );
+        }
         let results = statuses
             .into_iter()
             .map(|i| package_status_to_lua(ctx, &i))
             .collect::<Result<Vec<Table<'_>>, mlua::Error>>()?;
         res_tbl.set("updated", updated)?;
         res_tbl.set("packages", results)?;
-        if !updated {
-            output!("Ensure: Packages all up-to-date.");
-        }
 
         Ok(res_tbl)
     })?;
@@ -202,19 +220,37 @@ fn arch(ctx: &Lua) -> Result<Table, mlua::Error> {
             .get::<_, Table>("pkg")?
             .get::<_, Table>("arch")?
             .get::<_, bool>("_updated")?;
+        output!(
+            "Ensure Packages: {}",
+            packages
+                .iter()
+                .map(|p| p.name.as_str())
+                .collect::<Vec<&str>>()
+                .join(", ")
+        );
         let (updated, statuses) = pacman
             .ensure(&packages, !already_updated)
             .map_err(error::task_error)?;
         let res_tbl = ctx.create_table()?;
+        if !updated {
+            indent_output!(1, "Ensure: Packages all up-to-date.");
+        } else {
+            indent_output!(
+                1,
+                "Ensure: Installed {}",
+                statuses
+                    .iter()
+                    .map(|s| s.package.as_str())
+                    .collect::<Vec<&str>>()
+                    .join(", ")
+            );
+        }
         let results = statuses
             .into_iter()
             .map(|i| package_status_to_lua(ctx, &i))
             .collect::<Result<Vec<Table<'_>>, mlua::Error>>()?;
         res_tbl.set("updated", updated)?;
         res_tbl.set("packages", results)?;
-        if !updated {
-            output!("Ensure: Packages all up-to-date.");
-        }
 
         Ok(res_tbl)
     })?;

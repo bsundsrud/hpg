@@ -5,16 +5,16 @@ use crate::{indent_output, output, Result};
 
 pub(crate) mod apt;
 pub(crate) mod arch;
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Version(pub String);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct PackageStatus {
     pub package: String,
     pub status: InstallStatus,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum InstallStatus {
     Installed(Version),
     Requested,

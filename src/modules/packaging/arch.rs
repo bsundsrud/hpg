@@ -1,5 +1,11 @@
-use std::{collections::HashMap, ffi::OsStr, fmt::Debug, time::Instant};
+use std::{
+    collections::{HashMap, HashSet},
+    ffi::OsStr,
+    fmt::Debug,
+    time::Instant,
+};
 
+use console::style;
 use lazy_static::lazy_static;
 use regex::Regex;
 
@@ -7,6 +13,7 @@ use crate::{
     actions::util::{exec_streaming_process, ProcessOutput},
     debug_output,
     error::TaskError,
+    indent_output,
     modules::packaging::{InstallStatus, Version},
 };
 
@@ -87,26 +94,28 @@ impl PackageManager for ArchManager {
         let started = Instant::now();
         let mut args = vec!["-Qn"];
         args.extend_from_slice(packages);
-        let mut statuses = Vec::new();
+        let mut statuses = HashSet::new();
         let output = self.run_pkg_cmd(&args, false)?;
         for line in output.stdout.lines() {
             // found packages will show up in stdout
-            statuses.push(parse_package_status(line)?);
+            statuses.insert(parse_package_status(line)?);
         }
 
         for line in output.stderr.lines() {
             // missing packages will end up here
             if let Some(captures) = MISSING_PACKAGE_REGEX.captures(line) {
                 let pkg_name = &captures[1];
-                statuses.push(PackageStatus {
+                statuses.insert(PackageStatus {
                     package: pkg_name.into(),
                     status: InstallStatus::NotInstalled,
                 });
             } else {
-                return Err(TaskError::Action(format!(
-                    "Unrecognized error output: {}",
+                indent_output!(
+                    1,
+                    "{}: Unexpected output: {}",
+                    style("WARNING").yellow(),
                     line
-                )));
+                );
             }
         }
         args = vec!["-Qm"];
@@ -114,22 +123,24 @@ impl PackageManager for ArchManager {
         let output = self.run_pkg_cmd(&args, false)?;
         for line in output.stdout.lines() {
             // found packages will show up in stdout
-            statuses.push(parse_package_status(line)?);
+            statuses.insert(parse_package_status(line)?);
         }
 
         for line in output.stderr.lines() {
             // missing packages will end up here
             if let Some(captures) = MISSING_PACKAGE_REGEX.captures(line) {
                 let pkg_name = &captures[1];
-                statuses.push(PackageStatus {
+                statuses.insert(PackageStatus {
                     package: pkg_name.into(),
                     status: InstallStatus::NotInstalled,
                 });
             } else {
-                return Err(TaskError::Action(format!(
-                    "Unrecognized error output: {}",
+                indent_output!(
+                    1,
+                    "{}: Unexpected output: {}",
+                    style("WARNING").yellow(),
                     line
-                )));
+                );
             }
         }
         //sanity check that number of requested packages matches returned packages
@@ -146,7 +157,7 @@ impl PackageManager for ArchManager {
             packages.len(),
             started.elapsed().as_millis()
         );
-        Ok(statuses)
+        Ok(statuses.into_iter().collect())
     }
 
     fn call_install(&self, packages: &[InstallRequest]) -> Result<(), TaskError> {
