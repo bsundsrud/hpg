@@ -83,14 +83,11 @@ pub trait PackageManager {
 
         let statuses = self.package_status(&package_names)?;
         for s in statuses.iter() {
-            match s.status {
-                InstallStatus::NotInstalled => {
-                    return Err(TaskError::Action(format!(
-                        "Failed to install {}",
-                        s.package
-                    )))
-                }
-                _ => {}
+            if let InstallStatus::NotInstalled = s.status {
+                return Err(TaskError::Action(format!(
+                    "Failed to install {}",
+                    s.package
+                )));
             }
         }
         Ok(statuses)
@@ -98,7 +95,7 @@ pub trait PackageManager {
 
     fn remove_packages(&self, packages: &[&str]) -> Result<Vec<PackageStatus>, TaskError> {
         self.call_remove(packages)?;
-        let status = self.package_status(&packages)?;
+        let status = self.package_status(packages)?;
         for s in status.iter() {
             if let InstallStatus::Installed(_s) = &s.status {
                 return Err(TaskError::Action(format!("Failed to remove {}", s.package)));
@@ -121,16 +118,16 @@ pub trait PackageManager {
                 _ => Some(p.package.as_str()),
             })
             .collect();
-        if missing.len() == 0 {
+        if missing.is_empty() {
             return Ok((false, statuses));
         }
         if update {
             self.call_update_repos()?;
         }
         let missing_requests: Vec<InstallRequest> = packages
-            .into_iter()
+            .iter()
+            .filter(|&p| missing.contains(&p.name.as_str()))
             .cloned()
-            .filter(|p| missing.contains(&p.name.as_str()))
             .collect();
 
         Ok((true, self.install_packages(&missing_requests)?))

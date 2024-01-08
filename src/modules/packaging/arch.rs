@@ -68,12 +68,12 @@ fn parse_package_status(line: &str) -> Result<PackageStatus, TaskError> {
             package: package.to_string(),
             status: InstallStatus::Installed(Version(version.to_string())),
         };
-        return Ok(status);
+        Ok(status)
     } else {
-        return Err(TaskError::Action(format!(
+        Err(TaskError::Action(format!(
             "Failed to parse package status: {}",
             line
-        )));
+        )))
     }
 }
 
@@ -86,7 +86,7 @@ impl PackageManager for ArchManager {
     fn package_status(&self, packages: &[&str]) -> Result<Vec<PackageStatus>, TaskError> {
         let started = Instant::now();
         let mut args = vec!["-Qn"];
-        args.extend_from_slice(&packages);
+        args.extend_from_slice(packages);
         let mut statuses = Vec::new();
         let output = self.run_pkg_cmd(&args, false)?;
         for line in output.stdout.lines() {
@@ -110,7 +110,7 @@ impl PackageManager for ArchManager {
             }
         }
         args = vec!["-Qm"];
-        args.extend_from_slice(&packages);
+        args.extend_from_slice(packages);
         let output = self.run_pkg_cmd(&args, false)?;
         for line in output.stdout.lines() {
             // found packages will show up in stdout

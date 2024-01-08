@@ -144,7 +144,7 @@ fn arch(ctx: &Lua) -> Result<Table, mlua::Error> {
             return Ok(do_update);
         }
 
-        let pacman = ArchManager::new(get_arch_manager(&ctx));
+        let pacman = ArchManager::new(get_arch_manager(ctx));
         pacman.call_update_repos().map_err(error::task_error)?;
         ctx.globals()
             .get::<_, Table>("pkg")?
@@ -155,7 +155,7 @@ fn arch(ctx: &Lua) -> Result<Table, mlua::Error> {
     tbl.set("update", update)?;
 
     let status = ctx.create_function(|ctx, name: String| {
-        let pacman = ArchManager::new(get_arch_manager(&ctx));
+        let pacman = ArchManager::new(get_arch_manager(ctx));
         let status = pacman.package_status(&[&name]).map_err(error::task_error)?;
         package_status_to_lua(ctx, &status[0])
     })?;
@@ -166,7 +166,7 @@ fn arch(ctx: &Lua) -> Result<Table, mlua::Error> {
             .iter()
             .map(value_to_install_request)
             .collect::<Result<Vec<InstallRequest>, mlua::Error>>()?;
-        let pacman = ArchManager::new(get_arch_manager(&ctx));
+        let pacman = ArchManager::new(get_arch_manager(ctx));
         let installed = pacman
             .install_packages(&packages)
             .map_err(error::task_error)?;
@@ -179,7 +179,7 @@ fn arch(ctx: &Lua) -> Result<Table, mlua::Error> {
     tbl.set("install", install)?;
 
     let remove = ctx.create_function(|ctx, packages: Vec<String>| {
-        let pacman = ArchManager::new(get_arch_manager(&ctx));
+        let pacman = ArchManager::new(get_arch_manager(ctx));
         let r: Vec<&str> = packages.iter().map(|r| r.as_ref()).collect();
         let packages = pacman
             .remove_packages(&r)
@@ -192,7 +192,7 @@ fn arch(ctx: &Lua) -> Result<Table, mlua::Error> {
     tbl.set("remove", remove)?;
 
     let ensure = ctx.create_function(|ctx, packages: Vec<mlua::Value>| {
-        let pacman = ArchManager::new(get_arch_manager(&ctx));
+        let pacman = ArchManager::new(get_arch_manager(ctx));
         let packages = packages
             .iter()
             .map(value_to_install_request)
