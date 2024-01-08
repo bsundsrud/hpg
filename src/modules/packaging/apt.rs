@@ -1,9 +1,23 @@
-use std::process::{Command, Output, Stdio};
+use std::{
+    collections::HashMap,
+    process::{Command, Output, Stdio},
+};
 
-use crate::{actions::util::exit_status, error::TaskError, indent_output, output};
+use lazy_static::lazy_static;
+use regex::Regex;
+
+use crate::{
+    actions::util::{exec_streaming_process, exit_status},
+    error::TaskError,
+    indent_output, output,
+};
 
 use super::{InstallStatus, PackageManager, PackageStatus, Version};
 
+lazy_static! {
+    static ref DPKG_REGEX: Regex =
+        regex::Regex::new("dpkg-query: no packages found matching (.*)").unwrap();
+}
 pub struct AptManager {}
 
 impl AptManager {
@@ -27,58 +41,83 @@ impl AptManager {
         Ok(output)
     }
 
-    fn call_dpkg_query(&self, pkg: &str) -> Result<PackageStatus, TaskError> {
-        let output = Command::new("dpkg-query")
-            .arg("-f")
-            .arg("${db:Status-Status}||${db:Status-Want}||${Version}")
-            .arg("-W")
-            .arg(pkg)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            if stderr.contains("no packages found") {
-                return Ok(PackageStatus {
-                    package: pkg.into(),
-                    status: InstallStatus::NotFound,
+    fn call_dpkg_query(&self, pkgs: &[&str]) -> Result<Vec<PackageStatus>, TaskError> {
+        let mut args = vec![
+            "-f",
+            "${Package}||${db:Status-Status}||${db:Status-Want}||${Version}\n",
+            "-W",
+        ];
+        args.extend_from_slice(pkgs);
+        let output = exec_streaming_process(
+            "dpkg-query",
+            args,
+            true,
+            HashMap::new(),
+            None::<&str>,
+            true,
+            true,
+            false,
+        )?;
+        let mut statuses = Vec::new();
+        for line in output.stdout.lines() {
+            //stdout will have found packages
+            let mut parts = line.split("||");
+            let pkg_name = parts
+                .next()
+                .ok_or_else(|| TaskError::Action(format!("Bad dpkg-query status: {}", line)))?;
+            let status = parts
+                .next()
+                .ok_or_else(|| TaskError::Action(format!("Bad dpkg-query status: {}", line)))?;
+            let desired = parts.next().ok_or_else(|| {
+                TaskError::Action(format!("Bad dpkg-query status-want: {}", line))
+            })?;
+            let version = parts
+                .next()
+                .ok_or_else(|| TaskError::Action(format!("Bad dpkg-query version: {}", line)))?;
+            let requested_install = desired.starts_with("install");
+            let is_installed = status.starts_with("installed");
+            if requested_install && is_installed {
+                statuses.push(PackageStatus {
+                    package: pkg_name.into(),
+                    status: InstallStatus::Installed(Version(version.into())),
                 });
+            } else if requested_install && !is_installed {
+                statuses.push(PackageStatus {
+                    package: pkg_name.into(),
+                    status: InstallStatus::Requested,
+                })
+            } else {
+                statuses.push(PackageStatus {
+                    package: pkg_name.into(),
+                    status: InstallStatus::NotInstalled,
+                })
             }
+        }
+
+        for line in output.stderr.lines() {
+            // missing packages will be in stderr
+            if let Some(captures) = DPKG_REGEX.captures(line) {
+                let pkg_name = &captures[1];
+                statuses.push(PackageStatus {
+                    package: pkg_name.into(),
+                    status: InstallStatus::NotInstalled,
+                })
+            } else {
+                return Err(TaskError::Action(format!(
+                    "Unrecognized dpkg-query output: {}",
+                    line
+                )));
+            }
+        }
+        // sanity check: make sure we have statuses for all requested packages
+        if pkgs.len() != statuses.len() {
             return Err(TaskError::Action(format!(
-                "Dpkg-query call failed: {}",
-                stderr
+                "Requested statuses for {} packages, only received {}",
+                pkgs.len(),
+                statuses.len()
             )));
         }
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let mut parts = stdout.split("||");
-        let status = parts
-            .next()
-            .ok_or_else(|| TaskError::Action(format!("Bad dpkg-query status: {}", stdout)))?;
-        let desired = parts
-            .next()
-            .ok_or_else(|| TaskError::Action(format!("Bad dpkg-query status-want: {}", stdout)))?;
-        let version = parts
-            .next()
-            .ok_or_else(|| TaskError::Action(format!("Bad dpkg-query version: {}", stdout)))?;
-        let requested_install = desired.starts_with("install");
-        let is_installed = status.starts_with("installed");
-        if requested_install && is_installed {
-            Ok(PackageStatus {
-                package: pkg.into(),
-                status: InstallStatus::Installed(Version(version.into())),
-            })
-        } else if requested_install && !is_installed {
-            Ok(PackageStatus {
-                package: pkg.into(),
-                status: InstallStatus::Requested,
-            })
-        } else {
-            Ok(PackageStatus {
-                package: pkg.into(),
-                status: InstallStatus::NotInstalled,
-            })
-        }
+        Ok(statuses)
     }
 }
 
@@ -105,8 +144,8 @@ impl PackageManager for AptManager {
         }
     }
 
-    fn package_status(&self, name: &str) -> Result<PackageStatus, TaskError> {
-        self.call_dpkg_query(name)
+    fn package_status(&self, packages: &[&str]) -> Result<Vec<PackageStatus>, TaskError> {
+        self.call_dpkg_query(packages)
     }
 
     fn call_install(&self, packages: &[super::InstallRequest]) -> crate::Result<(), TaskError> {

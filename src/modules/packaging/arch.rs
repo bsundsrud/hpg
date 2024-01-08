@@ -1,5 +1,8 @@
 use std::{collections::HashMap, ffi::OsStr, fmt::Debug, time::Instant};
 
+use lazy_static::lazy_static;
+use regex::Regex;
+
 use crate::{
     actions::util::{exec_streaming_process, ProcessOutput},
     debug_output,
@@ -11,6 +14,10 @@ use super::{InstallRequest, PackageManager, PackageStatus};
 
 pub struct ArchManager {
     manager: String,
+}
+lazy_static! {
+    static ref MISSING_PACKAGE_REGEX: Regex =
+        Regex::new("error: package '(.+)' was not found").unwrap();
 }
 
 impl ArchManager {
@@ -76,55 +83,70 @@ impl PackageManager for ArchManager {
         Ok(())
     }
 
-    fn package_status(&self, name: &str) -> Result<PackageStatus, TaskError> {
+    fn package_status(&self, packages: &[&str]) -> Result<Vec<PackageStatus>, TaskError> {
         let started = Instant::now();
-        let output = self.run_pkg_cmd(&["-Qn", name], false)?;
-        let lines: Vec<String> = output.stdout.lines().map(|s| s.to_string()).collect();
-        if output.status == 1 && lines.len() == 0 {
-            //skip, may be from AUR
-        } else if lines.len() == 1 {
-            let status = parse_package_status(&lines[0])?;
-            debug_output!(
-                "Checked package {} in {}ms",
-                name,
-                started.elapsed().as_millis()
-            );
-            return Ok(status);
-        } else {
-            //didn't expect multiple lines here
-            return Err(TaskError::Action(format!(
-                "received unexpected for {} -Qn {}:\n  stdout: {}\n  stderr: {}",
-                self.manager, name, output.stdout, output.stderr
-            )));
+        let mut args = vec!["-Qn"];
+        args.extend_from_slice(&packages);
+        let mut statuses = Vec::new();
+        let output = self.run_pkg_cmd(&args, false)?;
+        for line in output.stdout.lines() {
+            // found packages will show up in stdout
+            statuses.push(parse_package_status(line)?);
         }
 
-        let output = self.run_pkg_cmd(&["-Qm", name], false)?;
-        let lines: Vec<String> = output.stdout.lines().map(|s| s.to_string()).collect();
-        if output.status == 1 && lines.len() == 0 {
-            debug_output!(
-                "Checked package {} in {}ms",
-                name,
-                started.elapsed().as_millis()
-            );
-            return Ok(PackageStatus {
-                package: name.into(),
-                status: InstallStatus::NotInstalled,
-            });
-        } else if lines.len() == 1 {
-            let status = parse_package_status(&lines[0])?;
-            debug_output!(
-                "Checked package {} in {}ms",
-                name,
-                started.elapsed().as_millis()
-            );
-            return Ok(status);
-        } else {
-            //didn't expect multiple lines here
+        for line in output.stderr.lines() {
+            // missing packages will end up here
+            if let Some(captures) = MISSING_PACKAGE_REGEX.captures(line) {
+                let pkg_name = &captures[1];
+                statuses.push(PackageStatus {
+                    package: pkg_name.into(),
+                    status: InstallStatus::NotInstalled,
+                });
+            } else {
+                return Err(TaskError::Action(format!(
+                    "Unrecognized error output: {}",
+                    line
+                )));
+            }
+        }
+        args = vec!["-Qm"];
+        args.extend_from_slice(&packages);
+        let output = self.run_pkg_cmd(&args, false)?;
+        for line in output.stdout.lines() {
+            // found packages will show up in stdout
+            statuses.push(parse_package_status(line)?);
+        }
+
+        for line in output.stderr.lines() {
+            // missing packages will end up here
+            if let Some(captures) = MISSING_PACKAGE_REGEX.captures(line) {
+                let pkg_name = &captures[1];
+                statuses.push(PackageStatus {
+                    package: pkg_name.into(),
+                    status: InstallStatus::NotInstalled,
+                });
+            } else {
+                return Err(TaskError::Action(format!(
+                    "Unrecognized error output: {}",
+                    line
+                )));
+            }
+        }
+        //sanity check that number of requested packages matches returned packages
+        //TODO: this would probably happen if you repeated a package in the request? should that be caught somewhere?
+        if packages.len() != statuses.len() {
             return Err(TaskError::Action(format!(
-                "received unexpected for {} -Qn {}:\n  stdout: {}\n  stderr: {}",
-                self.manager, name, output.stdout, output.stderr
+                "Requested status on {} packages, got {} responses",
+                packages.len(),
+                statuses.len()
             )));
         }
+        debug_output!(
+            "Got status for {} packages in {}ms",
+            packages.len(),
+            started.elapsed().as_millis()
+        );
+        Ok(statuses)
     }
 
     fn call_install(&self, packages: &[InstallRequest]) -> Result<(), TaskError> {

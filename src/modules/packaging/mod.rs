@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::error::TaskError;
 use crate::{indent_output, output, Result};
 
@@ -16,7 +18,6 @@ pub struct PackageStatus {
 pub enum InstallStatus {
     Installed(Version),
     Requested,
-    NotFound,
     NotInstalled,
 }
 
@@ -28,7 +29,7 @@ pub struct InstallRequest {
 
 pub trait PackageManager {
     fn call_update_repos(&self) -> Result<(), TaskError>;
-    fn package_status(&self, name: &str) -> Result<PackageStatus, TaskError>;
+    fn package_status(&self, packages: &[&str]) -> Result<Vec<PackageStatus>, TaskError>;
     fn call_install(&self, packages: &[InstallRequest]) -> Result<(), TaskError>;
     fn call_remove(&self, packages: &[&str]) -> Result<(), TaskError>;
 
@@ -38,8 +39,18 @@ pub trait PackageManager {
     ) -> Result<Vec<PackageStatus>, TaskError> {
         output!("install packages:");
         let mut requests: Vec<InstallRequest> = Vec::new();
-        for package in packages {
-            let p = self.package_status(&package.name)?;
+        let package_names: Vec<&str> = packages.iter().map(|r| r.name.as_str()).collect();
+        let statuses = self.package_status(&package_names)?;
+        for p in statuses {
+            let package = packages
+                .iter()
+                .find(|install| install.name == p.package)
+                .ok_or_else(|| {
+                    TaskError::Action(format!(
+                        "Mismatched requests: could not find request for package {}",
+                        p.package
+                    ))
+                })?;
             if let InstallStatus::Installed(Version(installed_v)) = p.status {
                 if let Some(Version(requested_v)) = &package.version {
                     if *requested_v != installed_v {
@@ -70,13 +81,10 @@ pub trait PackageManager {
         }
         self.call_install(&requests)?;
 
-        let status = packages
-            .iter()
-            .map(|p| self.package_status(&p.name))
-            .collect::<Result<Vec<PackageStatus>, _>>()?;
-        for s in status.iter() {
+        let statuses = self.package_status(&package_names)?;
+        for s in statuses.iter() {
             match s.status {
-                InstallStatus::NotFound | InstallStatus::NotInstalled => {
+                InstallStatus::NotInstalled => {
                     return Err(TaskError::Action(format!(
                         "Failed to install {}",
                         s.package
@@ -85,20 +93,46 @@ pub trait PackageManager {
                 _ => {}
             }
         }
-        Ok(status)
+        Ok(statuses)
     }
 
     fn remove_packages(&self, packages: &[&str]) -> Result<Vec<PackageStatus>, TaskError> {
         self.call_remove(packages)?;
-        let status = packages
-            .iter()
-            .map(|p| self.package_status(p))
-            .collect::<Result<Vec<PackageStatus>, _>>()?;
+        let status = self.package_status(&packages)?;
         for s in status.iter() {
             if let InstallStatus::Installed(_s) = &s.status {
                 return Err(TaskError::Action(format!("Failed to remove {}", s.package)));
             }
         }
         Ok(status)
+    }
+
+    fn ensure(
+        &self,
+        packages: &[InstallRequest],
+        update: bool,
+    ) -> Result<(bool, Vec<PackageStatus>), TaskError> {
+        let package_names: Vec<&str> = packages.iter().map(|p| p.name.as_str()).collect();
+        let statuses = self.package_status(&package_names)?;
+        let missing: HashSet<&str> = statuses
+            .iter()
+            .filter_map(|p| match p.status {
+                InstallStatus::Installed(_) => None,
+                _ => Some(p.package.as_str()),
+            })
+            .collect();
+        if missing.len() == 0 {
+            return Ok((false, statuses));
+        }
+        if update {
+            self.call_update_repos()?;
+        }
+        let missing_requests: Vec<InstallRequest> = packages
+            .into_iter()
+            .cloned()
+            .filter(|p| missing.contains(&p.name.as_str()))
+            .collect();
+
+        Ok((true, self.install_packages(&missing_requests)?))
     }
 }

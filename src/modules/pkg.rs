@@ -49,8 +49,8 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
 
     let status = ctx.create_function(|ctx, name: String| {
         let apt = AptManager::new();
-        let status = apt.package_status(&name).map_err(error::task_error)?;
-        package_status_to_lua(ctx, &status)
+        let status = apt.package_status(&[&name]).map_err(error::task_error)?;
+        package_status_to_lua(ctx, &status[0])
     })?;
     tbl.set("status", status)?;
 
@@ -84,58 +84,29 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
 
     let ensure = ctx.create_function(|ctx, packages: Vec<mlua::Value>| {
         let apt = AptManager::new();
-        let mut found_missing = false;
         let packages = packages
             .iter()
             .map(value_to_install_request)
             .collect::<Result<Vec<InstallRequest>, mlua::Error>>()?;
-
-        for p in packages.iter() {
-            let status = apt.package_status(&p.name).map_err(error::task_error)?;
-            match status.status {
-                // If a requested package is missing/not installed, try to install the whole batch
-                InstallStatus::NotFound | InstallStatus::NotInstalled => {
-                    found_missing = true;
-                    break;
-                }
-                // If a requested package is installed but at the wrong version, try to install the whole batch
-                InstallStatus::Installed(ref v) => {
-                    if let Some(ref requested_version) = p.version {
-                        if requested_version != v {
-                            found_missing = true;
-                            break;
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
+        let already_updated = ctx
+            .globals()
+            .get::<_, Table>("pkg")?
+            .get::<_, Table>("apt")?
+            .get::<_, bool>("_updated")?;
+        let (updated, statuses) = apt
+            .ensure(&packages, !already_updated)
+            .map_err(error::task_error)?;
         let res_tbl = ctx.create_table()?;
-        if found_missing {
-            output!("Ensure: Packages differ from request.");
-            // Use warm apt cache if available, otherwise refresh
-            let already_updated = ctx
-                .globals()
-                .get::<_, Table>("pkg")?
-                .get::<_, Table>("apt")?
-                .get::<_, bool>("_updated")?;
-            if !already_updated {
-                apt.call_update_repos().map_err(error::task_error)?;
-            }
-
-            let installed = apt.install_packages(&packages).map_err(error::task_error)?;
-            let results = installed
-                .into_iter()
-                .map(|i| package_status_to_lua(ctx, &i))
-                .collect::<Result<Vec<Table<'_>>, mlua::Error>>()?;
-            res_tbl.set("updated", true)?;
-            res_tbl.set("packages", results)?;
-        } else {
+        let results = statuses
+            .into_iter()
+            .map(|i| package_status_to_lua(ctx, &i))
+            .collect::<Result<Vec<Table<'_>>, mlua::Error>>()?;
+        res_tbl.set("updated", updated)?;
+        res_tbl.set("packages", results)?;
+        if !updated {
             output!("Ensure: Packages all up-to-date.");
-            res_tbl.set("updated", false)?;
-            let blank = ctx.create_table()?;
-            res_tbl.set("packages", blank)?;
         }
+
         Ok(res_tbl)
     })?;
     tbl.set("ensure", ensure)?;
@@ -185,8 +156,8 @@ fn arch(ctx: &Lua) -> Result<Table, mlua::Error> {
 
     let status = ctx.create_function(|ctx, name: String| {
         let pacman = ArchManager::new(get_arch_manager(&ctx));
-        let status = pacman.package_status(&name).map_err(error::task_error)?;
-        package_status_to_lua(ctx, &status)
+        let status = pacman.package_status(&[&name]).map_err(error::task_error)?;
+        package_status_to_lua(ctx, &status[0])
     })?;
     tbl.set("status", status)?;
 
@@ -222,60 +193,29 @@ fn arch(ctx: &Lua) -> Result<Table, mlua::Error> {
 
     let ensure = ctx.create_function(|ctx, packages: Vec<mlua::Value>| {
         let pacman = ArchManager::new(get_arch_manager(&ctx));
-        let mut found_missing = false;
         let packages = packages
             .iter()
             .map(value_to_install_request)
             .collect::<Result<Vec<InstallRequest>, mlua::Error>>()?;
-
-        for p in packages.iter() {
-            let status = pacman.package_status(&p.name).map_err(error::task_error)?;
-            match status.status {
-                // If a requested package is missing/not installed, try to install the whole batch
-                InstallStatus::NotFound | InstallStatus::NotInstalled => {
-                    found_missing = true;
-                    break;
-                }
-                // If a requested package is installed but at the wrong version, try to install the whole batch
-                InstallStatus::Installed(ref v) => {
-                    if let Some(ref requested_version) = p.version {
-                        if requested_version != v {
-                            found_missing = true;
-                            break;
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
+        let already_updated = ctx
+            .globals()
+            .get::<_, Table>("pkg")?
+            .get::<_, Table>("arch")?
+            .get::<_, bool>("_updated")?;
+        let (updated, statuses) = pacman
+            .ensure(&packages, !already_updated)
+            .map_err(error::task_error)?;
         let res_tbl = ctx.create_table()?;
-        if found_missing {
-            output!("Ensure: Packages differ from request.");
-            // Use warm apt cache if available, otherwise refresh
-            let already_updated = ctx
-                .globals()
-                .get::<_, Table>("pkg")?
-                .get::<_, Table>("arch")?
-                .get::<_, bool>("_updated")?;
-            if !already_updated {
-                pacman.call_update_repos().map_err(error::task_error)?;
-            }
-
-            let installed = pacman
-                .install_packages(&packages)
-                .map_err(error::task_error)?;
-            let results = installed
-                .into_iter()
-                .map(|i| package_status_to_lua(ctx, &i))
-                .collect::<Result<Vec<Table<'_>>, mlua::Error>>()?;
-            res_tbl.set("updated", true)?;
-            res_tbl.set("packages", results)?;
-        } else {
+        let results = statuses
+            .into_iter()
+            .map(|i| package_status_to_lua(ctx, &i))
+            .collect::<Result<Vec<Table<'_>>, mlua::Error>>()?;
+        res_tbl.set("updated", updated)?;
+        res_tbl.set("packages", results)?;
+        if !updated {
             output!("Ensure: Packages all up-to-date.");
-            res_tbl.set("updated", false)?;
-            let blank = ctx.create_table()?;
-            res_tbl.set("packages", blank)?;
         }
+
         Ok(res_tbl)
     })?;
     tbl.set("ensure", ensure)?;
@@ -293,9 +233,6 @@ fn package_status_to_lua<'lua>(
         InstallStatus::Installed(Version(v)) => {
             tbl.set("status", "installed")?;
             tbl.set("version", v.as_str())?;
-        }
-        InstallStatus::NotFound => {
-            tbl.set("status", "notfound")?;
         }
         InstallStatus::NotInstalled => {
             tbl.set("status", "notinstalled")?;

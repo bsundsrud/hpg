@@ -244,7 +244,6 @@ end
 
 ---@alias PackageInstallationStatus
 ---| "installed" # Package is currently installed.
----| "notfound" # Package was not found in the repos.
 ---| "requested" # Package was requested to install, but has not completed installation.
 ---| "notinstalled" # Package is not installed.
 
