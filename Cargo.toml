@@ -6,41 +6,41 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.68"
-flate2 = "1.0.25"
-lazy_static = "1.4.0"
-nix = "0.26.2"
-petgraph = "0.6.2"
-reqwest = { version = "0.11.14", features = ["rustls-tls", "blocking", "json"], default-features = false }
-serde = { version = "1.0.152", features = ["derive"] }
-serde_json = "1.0.91"
-sha2 = "0.10.6"
-tar = "0.4.38"
-tempfile = "3.3.0"
-tera = "1.17.1"
-thiserror = "1.0.51"
-regex = "1.7.1"
-url = "2.3.1"
-zbus = "3.7.0"
-zip = "0.6.3"
-mlua = { version = "0.9.1", features = ["lua54", "mlua_derive", "vendored", "macros"] }
-tokio = { version = "1.32.0", features = ["full"] }
-indicatif = { version = "0.17.7", features = ["improved_unicode"] }
-console = "0.15.7"
-clap = { version = "4.4.11", features = ["derive"] }
-ignore = "0.4.21"
-russh = { version = "0.40.2", features = ["vendored-openssl"] }
-russh-keys = { version = "0.40.1", features = ["vendored-openssl"] }
+anyhow = "1.0.86"
+flate2 = "1.0.31"
+lazy_static = "1.5.0"
+nix = { version ="0.29.0", features = [ "user", "fs" ] }
+petgraph = "0.6.5"
+reqwest = { version = "0.12.5", features = ["rustls-tls", "blocking", "json"], default-features = false }
+serde = { version = "1.0.204", features = ["derive"] }
+serde_json = "1.0.122"
+sha2 = "0.10.8"
+tar = "0.4.41"
+tempfile = "3.12.0"
+tera = "1.20.0"
+thiserror = "1.0.63"
+regex = "1.10.6"
+url = "2.5.2"
+zbus = "4.4.0"
+zip = "2.1.6"
+mlua = { version = "0.9.9", features = ["lua54", "vendored", "macros"] }
+tokio = { version = "1.39.2", features = ["full"] }
+indicatif = { version = "0.17.8", features = ["improved_unicode"] }
+console = "0.15.8"
+clap = { version = "4.5.13", features = ["derive"] }
+ignore = "0.4.22"
+russh = { version = "0.44.0", features = ["vendored-openssl"] }
+russh-keys = { version = "0.44.0", features = ["vendored-openssl"] }
 russh-config = "0.7.1"
-ciborium = "0.2.1"
-serde_yaml = "0.9.27"
+ciborium = "0.2.2"
+serde_yaml = "0.9.34"
 pathdiff = "0.2.1"
-tokio-util = { version = "0.7.10", features = ["codec"] }
-futures-util = "0.3.29"
-async-trait = "0.1.74"
+tokio-util = { version = "0.7.11", features = ["codec"] }
+futures-util = "0.3.30"
+async-trait = "0.1.81"
 dirs-next = "2.0.0"
-pin-project = "1.1.3"
-bytes = "1.5.0"
-crossbeam = { version = "0.8.2", features = ["crossbeam-channel"] }
-rustix = "0.38.19" # Added for dependabot
+pin-project = "1.1.5"
+bytes = "1.7.1"
+crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
+rustix = "0.38.34" # Added for dependabot
 fast_rsync = "0.2.0"
