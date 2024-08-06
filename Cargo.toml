@@ -34,7 +34,6 @@ russh-keys = { version = "0.40.1", features = ["vendored-openssl"] }
 russh-config = "0.7.1"
 ciborium = "0.2.1"
 serde_yaml = "0.9.27"
-librsync = "0.2.3"
 pathdiff = "0.2.1"
 tokio-util = { version = "0.7.10", features = ["codec"] }
 futures-util = "0.3.29"
@@ -44,3 +43,4 @@ pin-project = "1.1.3"
 bytes = "1.5.0"
 crossbeam = { version = "0.8.2", features = ["crossbeam-channel"] }
 rustix = "0.38.19" # Added for dependabot
+fast_rsync = "0.2.0"

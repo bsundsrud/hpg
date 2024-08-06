@@ -20,8 +20,8 @@ use crate::{
 use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
 use console::style;
+use fast_rsync::Signature;
 use futures_util::Future;
-use librsync::whole;
 use russh::{
     client::{Handler, Msg},
     Channel, ChannelMsg, Disconnect,
@@ -30,6 +30,7 @@ use russh_keys::{key, load_secret_key};
 
 use std::{
     collections::HashSet,
+    io::Read,
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
@@ -420,9 +421,13 @@ async fn get_patch_data(
 fn generate_delta(local_path: &Path, remote_sig: &[u8]) -> Result<Vec<u8>, HpgRemoteError> {
     let f = std::fs::File::open(local_path)?;
     let mut reader = std::io::BufReader::new(f);
-    let mut sig_reader = std::io::BufReader::new(remote_sig);
+    let mut local_buf = Vec::new();
+    reader.read_to_end(&mut local_buf)?;
     let mut delta = Vec::new();
-    whole::delta(&mut reader, &mut sig_reader, &mut delta)?;
+
+    let sig = Signature::deserialize(remote_sig.to_vec())?;
+    let indexed = sig.index();
+    fast_rsync::diff(&indexed, &local_buf, &mut delta)?;
     Ok(delta)
 }
 

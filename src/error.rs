@@ -83,8 +83,12 @@ pub enum HpgRemoteError {
     YamlError(#[from] serde_yaml::Error),
     #[error("Unknown inventory format: {0}")]
     ConfigError(String),
-    #[error("Rsync calculation error: {0}")]
-    RsyncError(#[from] librsync::Error),
+    #[error("Rsync apply error: {0}")]
+    RsyncApplyError(#[from] fast_rsync::ApplyError),
+    #[error("Rsync sig error: {0}")]
+    RsyncSigError(#[from] fast_rsync::SignatureParseError),
+    #[error("Rsync diff error: {0}")]
+    RsyncDiffError(#[from] fast_rsync::DiffError),
     #[error("Unknown Error: {0}")]
     Unknown(String),
     #[error("Exec Error: {0}")]

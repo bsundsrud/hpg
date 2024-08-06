@@ -1,5 +1,5 @@
 use std::{
-    io::{BufReader, BufWriter},
+    io::{BufReader, BufWriter, Read},
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -20,7 +20,7 @@ use crate::{
 };
 use console::style;
 use futures_util::{SinkExt, StreamExt};
-use librsync::whole;
+
 use nix::unistd::{Gid, Uid};
 use tokio::{
     fs::OpenOptions,
@@ -259,10 +259,11 @@ fn apply_patch(path: &Path, patch: &[u8]) -> Result<(), HpgRemoteError> {
             .open(&temp_path)?;
         let orig_file = std::fs::File::open(path)?;
         let mut reader = BufReader::new(orig_file);
-        let mut patch_reader = BufReader::new(patch);
         let mut writer = BufWriter::new(temp_file);
 
-        whole::patch(&mut reader, &mut patch_reader, &mut writer)?;
+        let mut file_bytes = Vec::new();
+        reader.read_to_end(&mut file_bytes)?;
+        fast_rsync::apply(&file_bytes, patch, &mut writer)?;
     }
     std::fs::remove_file(path)?;
     std::fs::rename(&temp_path, path)?;

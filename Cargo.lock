@@ -131,6 +131,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "080e9890a082662b09c1ad45f567faeeb47f22b5fb23895fbe1e651e718e25ca"
 
 [[package]]
+name = "arrayref"
+version = "0.3.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d151e35f61089500b617991b791fc8bfd237ae50cd5950803758a179b41e67a"
+
+[[package]]
 name = "async-broadcast"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1067,6 +1073,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fast_rsync"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d97c4d6e20491c84c60612a24660fc1fbfc56bfe24f5b49e6a9fd3259010794"
+dependencies = [
+ "arrayref",
+]
+
+[[package]]
 name = "fastrand"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1441,12 +1456,12 @@ dependencies = [
  "console",
  "crossbeam",
  "dirs-next",
+ "fast_rsync",
  "flate2",
  "futures-util",
  "ignore",
  "indicatif",
  "lazy_static",
- "librsync",
  "mlua",
  "nix",
  "pathdiff",
@@ -1723,27 +1738,6 @@ dependencies = [
  "bitflags 2.4.1",
  "libc",
  "redox_syscall",
-]
-
-[[package]]
-name = "librsync"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dea2e44fb63800a63512a0bb67eda4e70213d9449039d7243d0d1bfbb5e90a1f"
-dependencies = [
- "libc",
- "librsync-sys",
- "log",
-]
-
-[[package]]
-name = "librsync-sys"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a410251d4d41f7696e9e1c8f2c30fbc9022416bc35e9008337ade43bddcf2d4"
-dependencies = [
- "cc",
- "libc",
 ]
 
 [[package]]
