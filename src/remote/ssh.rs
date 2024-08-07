@@ -77,12 +77,12 @@ fn merge_vars(
     for f in inventory.vars_files.iter() {
         vars = vars.merge(Variables::from_file(f)?)?;
     }
-    vars = vars.merge(Variables::from_map(&inventory.vars)?)?;
+    vars = vars.merge(Variables::from_toml_map(&inventory.vars)?)?;
     if let Some(v) = host_config {
         for f in v.vars_files.iter() {
             vars = vars.merge(Variables::from_file(f)?)?;
         }
-        vars = vars.merge(Variables::from_map(&v.vars)?)?;
+        vars = vars.merge(Variables::from_toml_map(&v.vars)?)?;
     }
     vars = vars.merge(cmdline_vars)?;
     Ok(vars)
@@ -123,7 +123,7 @@ pub fn run_hpg_ssh(
         .unwrap_or_else(|| "hpg".to_string());
 
     let vars = merge_vars(vars, &host_config, &inventory)?;
-
+    debug_output!("vars: {:?}", vars);
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;

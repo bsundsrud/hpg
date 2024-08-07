@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fs::File, path::Path};
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    path::Path,
+};
 
 use serde::Deserialize;
 
@@ -8,7 +12,7 @@ use crate::{error::HpgRemoteError, Result};
 #[serde(default)]
 pub struct InventoryConfig {
     pub hosts: HashMap<String, HostConfig>,
-    pub vars: HashMap<String, String>,
+    pub vars: HashMap<String, toml::Value>,
     pub vars_files: Vec<String>,
 }
 
@@ -24,37 +28,14 @@ pub struct HostConfig {
     #[serde(default)]
     pub vars_files: Vec<String>,
     #[serde(default)]
-    pub vars: HashMap<String, String>,
+    pub vars: HashMap<String, toml::Value>,
 }
 
 impl InventoryConfig {
     pub fn load<P: AsRef<Path>>(path: P) -> Result<InventoryConfig, HpgRemoteError> {
         let p = path.as_ref();
-        let config = match p
-            .extension()
-            .map(|e| e.to_string_lossy().to_string())
-            .as_deref()
-        {
-            Some("json") => {
-                let f = File::open(p)?;
-                serde_json::from_reader(f)?
-            }
-            Some("yaml") | Some("yml") => {
-                let f = File::open(p)?;
-                serde_yaml::from_reader(f)?
-            }
-            Some(e) => {
-                return Err(crate::error::HpgRemoteError::ConfigError(format!(
-                    "File extension {}",
-                    e
-                )));
-            }
-            None => {
-                return Err(crate::error::HpgRemoteError::ConfigError(
-                    "No file extension.".into(),
-                ));
-            }
-        };
+        let s = fs::read_to_string(p)?;
+        let config = toml::from_str(&s)?;
         Ok(config)
     }
 

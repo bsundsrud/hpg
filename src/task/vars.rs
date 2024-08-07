@@ -1,4 +1,4 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 use anyhow::{anyhow, Context};
 use mlua::{Lua, MetaMethod, UserData, Value};
@@ -17,6 +17,13 @@ pub struct Variables {
 impl Variables {
     pub fn from_json(json: serde_json::Value) -> Variables {
         Variables { raw: json }
+    }
+
+    pub fn from_toml_map(
+        map: &HashMap<String, toml::Value>,
+    ) -> Result<Variables, serde_json::Error> {
+        let json = serde_json::to_value(map)?;
+        Ok(Variables::from_json(json))
     }
 
     pub fn from_map(map: &HashMap<String, String>) -> Result<Variables, serde_json::Error> {
@@ -98,9 +105,7 @@ fn merge_objects(
             left.append(&mut right);
             Ok(Value::Object(left))
         }
-        _ => {
-            Err(anyhow!("Only JSON Objects can be merged"))
-        }
+        _ => Err(anyhow!("Only JSON Objects can be merged")),
     }
 }
 

@@ -298,7 +298,7 @@ fn run_hpg() -> Result<()> {
             let inventory = if let Some(p) = inventory {
                 try_inventory_files(&[&p])?
             } else {
-                try_inventory_files(&["inventory.yaml", "inventory.yml", "inventory.json"])?
+                try_inventory_files(&["inventory.toml"])?
             };
             let vars = parse_variables(&hpg_opts)?;
             remote::ssh::run_hpg_ssh(host, hpg_opts, vars, inventory)?;

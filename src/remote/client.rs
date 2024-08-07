@@ -1,9 +1,6 @@
 use std::path::Path;
 
-use ignore::{
-    overrides::OverrideBuilder,
-    WalkBuilder,
-};
+use ignore::{overrides::OverrideBuilder, WalkBuilder};
 use pathdiff::diff_paths;
 
 use crate::error::HpgRemoteError;
@@ -18,9 +15,7 @@ pub fn find_hpg_files(root: &Path) -> Result<Vec<LocalFile>, HpgRemoteError> {
         .case_insensitive(true)?
         .add("!.meta/")?
         .add("!.hpgignore")?
-        .add("!inventory.yaml")?
-        .add("!inventory.yml")?
-        .add("!inventory.json")?
+        .add("!inventory.toml")?
         .build()?;
     for res in WalkBuilder::new(root)
         .add_custom_ignore_filename(".hpgignore")

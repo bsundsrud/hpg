@@ -33,7 +33,6 @@ russh = { version = "0.44.0", features = ["vendored-openssl"] }
 russh-keys = { version = "0.44.0", features = ["vendored-openssl"] }
 russh-config = "0.7.1"
 ciborium = "0.2.2"
-serde_yaml = "0.9.34"
 pathdiff = "0.2.1"
 tokio-util = { version = "0.7.11", features = ["codec"] }
 futures-util = "0.3.30"
@@ -44,3 +43,4 @@ bytes = "1.7.1"
 crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
 rustix = "0.38.34" # Added for dependabot
 fast_rsync = "0.2.0"
+toml = "0.8.19"
