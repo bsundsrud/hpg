@@ -201,7 +201,7 @@ async fn wait_for_exec_msg(
     rw: &mut Framed<UnixStream, HpgCodec<HpgMessage>>,
 ) -> Result<HpgMessage, HpgRemoteError> {
     loop {
-        let msg = match time::timeout(Duration::from_secs(50), rw.next()).await {
+        let msg = match time::timeout(Duration::from_secs(5), rw.next()).await {
             Ok(m) => m,
             Err(_e) => {
                 return Err(HpgRemoteError::Unknown("SERVER: Timed out".into()));

@@ -214,7 +214,9 @@ impl Session {
                             debug_output!("E: {}", line);
                         }
                     }
-                    _ => {}
+                    other => {
+                        debug_output!("Other: {other:?}");
+                    }
                 }
             }
             Ok(())
