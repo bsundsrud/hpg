@@ -33,10 +33,11 @@ fn format_lua_value(ctx: &Lua, v: mlua::Value) -> Result<String, mlua::Error> {
         mlua::Value::UserData(d) => {
             let globals = ctx.globals();
             let tostring: Function = globals.get("tostring")?;
-            let s = tostring.call::<_, String>(d)?;
+            let s = tostring.call::<String>(d)?;
             format!("\"{}\"", s)
         }
         mlua::Value::Error(e) => format!("<error: {}>", e),
+        mlua::Value::Other(_value_ref) => unimplemented!("I have no idea what to do with this"),
     };
     Ok(s)
 }
@@ -53,7 +54,7 @@ pub fn echo(lua: &Lua) -> Result<(), TaskError> {
 }
 
 pub fn fail(lua: &Lua) -> Result<(), TaskError> {
-    let f = lua.create_function::<_, (), _>(|_, msg: String| {
+    let f = lua.create_function::<_, _, ()>(|_, msg: String| {
         output!("fail:");
         output!("  {}", &msg);
         Err(mlua::Error::ExternalError(Arc::new(TaskError::Action(msg))))
@@ -68,7 +69,9 @@ pub fn cancel(lua: &Lua) -> Result<(), TaskError> {
         if let Some(ref m) = msg {
             output!("  {}", &m);
         }
-        Ok(TaskResult::Incomplete(msg))
+        Ok(TaskResult::Incomplete(
+            crate::task::IncompleteReason::Skipped,
+        ))
     })?;
     lua.globals().set("cancel", f)?;
     Ok(())

@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    fs::{self, File},
-    path::Path,
-};
+use std::{collections::HashMap, fs, path::Path};
 
 use serde::Deserialize;
 

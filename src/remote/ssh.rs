@@ -17,16 +17,15 @@ use crate::{
     tracker::{self, Tracker, TrackerEvent},
     HpgOpt,
 };
-use async_trait::async_trait;
 use bytes::{BufMut, BytesMut};
 use console::style;
 use fast_rsync::Signature;
 use futures_util::Future;
 use russh::{
     client::{Handler, Msg},
+    keys::{load_secret_key, PrivateKeyWithHashAlg},
     Channel, ChannelMsg, Disconnect,
 };
-use russh_keys::{key, load_secret_key};
 
 use std::{
     collections::HashSet,
@@ -46,12 +45,11 @@ pub struct HostInfo {
 }
 pub struct Client {}
 
-#[async_trait]
 impl Handler for Client {
     type Error = HpgRemoteError;
     async fn check_server_key(
         &mut self,
-        _server_public_key: &key::PublicKey,
+        _server_public_key: &russh::keys::PublicKey,
     ) -> Result<bool, Self::Error> {
         Ok(true)
     }
@@ -157,10 +155,16 @@ impl Session {
         let mut session =
             russh::client::connect(ssh_config, (config.host_name, config.port), sh).await?;
         let auth_res = session
-            .authenticate_publickey(&config.user, Arc::new(key_pair))
+            .authenticate_publickey(
+                &config.user,
+                PrivateKeyWithHashAlg::new(
+                    Arc::new(key_pair),
+                    session.best_supported_rsa_hash().await?.flatten(),
+                ),
+            )
             .await?;
 
-        if !auth_res {
+        if !auth_res.success() {
             return Err(HpgRemoteError::AuthFailed(config.user));
         }
         Ok(Self { session })

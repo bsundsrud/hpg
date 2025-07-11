@@ -26,10 +26,10 @@ impl HpgUrl {
     pub fn opts_to_request(
         &self,
         client: &Client,
-        opts: &Table<'_>,
+        opts: &Table,
     ) -> Result<RequestBuilder, mlua::Error> {
         let mut builder = client.get(self.url.clone());
-        if let Some(headers) = opts.get::<_, Option<Table>>("headers")? {
+        if let Some(headers) = opts.get::<Option<Table>>("headers")? {
             for pair in headers.pairs::<String, String>() {
                 let (key, value) = pair?;
                 builder = builder.header(key, value);
@@ -38,10 +38,8 @@ impl HpgUrl {
         Ok(builder)
     }
 
-    pub fn validate_response(resp: &Response, opts: &Table<'_>) -> Result<(), mlua::Error> {
-        let expected_response = opts
-            .get::<_, Option<u16>>("expected_response")?
-            .unwrap_or(200);
+    pub fn validate_response(resp: &Response, opts: &Table) -> Result<(), mlua::Error> {
+        let expected_response = opts.get::<Option<u16>>("expected_response")?.unwrap_or(200);
 
         if resp.status()
             != StatusCode::from_u16(expected_response).map_err(|_| {
@@ -59,7 +57,7 @@ impl HpgUrl {
 }
 
 impl UserData for HpgUrl {
-    fn add_methods<'lua, T: mlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
+    fn add_methods<T: mlua::UserDataMethods<Self>>(methods: &mut T) {
         methods.add_method("get", |ctx, this, opts: Option<Table>| {
             let client = reqwest::blocking::Client::new();
             let opts = if let Some(o) = opts {

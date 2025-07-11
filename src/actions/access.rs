@@ -21,21 +21,21 @@ struct UserModDef {
 }
 
 impl UserModDef {
-    fn from_lua(name: String, opts: Table<'_>) -> Result<UserModDef, LuaError> {
-        let comment = opts.get::<_, Option<String>>("comment")?;
-        let home_dir = opts.get::<_, Option<String>>("home_dir")?;
-        let primary_group = opts.get::<_, Option<String>>("group")?;
+    fn from_lua(name: String, opts: Table) -> Result<UserModDef, LuaError> {
+        let comment = opts.get::<Option<String>>("comment")?;
+        let home_dir = opts.get::<Option<String>>("home_dir")?;
+        let primary_group = opts.get::<Option<String>>("group")?;
         let groups = opts
-            .get::<_, Option<Vec<String>>>("groups")?
+            .get::<Option<Vec<String>>>("groups")?
             .unwrap_or_default();
-        let system = opts.get::<_, Option<bool>>("is_system")?.unwrap_or(false);
+        let system = opts.get::<Option<bool>>("is_system")?.unwrap_or(false);
         let user_group = opts
-            .get::<_, Option<bool>>("create_user_group")?
+            .get::<Option<bool>>("create_user_group")?
             .unwrap_or(true);
-        let create_home = opts.get::<_, Option<bool>>("create_home")?.unwrap_or(false);
-        let uid = opts.get::<_, Option<u32>>("uid")?;
+        let create_home = opts.get::<Option<bool>>("create_home")?.unwrap_or(false);
+        let uid = opts.get::<Option<u32>>("uid")?;
         let shell = opts
-            .get::<_, Option<String>>("shell")?
+            .get::<Option<String>>("shell")?
             .unwrap_or_else(|| "/usr/bin/nologin".to_string());
         Ok(UserModDef {
             name,
@@ -60,9 +60,9 @@ struct GroupModDef {
 }
 
 impl GroupModDef {
-    fn from_lua(name: String, opts: Table<'_>) -> Result<GroupModDef, LuaError> {
-        let system = opts.get::<_, Option<bool>>("is_system")?.unwrap_or(false);
-        let gid = opts.get::<_, Option<u32>>("gid")?;
+    fn from_lua(name: String, opts: Table) -> Result<GroupModDef, LuaError> {
+        let system = opts.get::<Option<bool>>("is_system")?.unwrap_or(false);
+        let gid = opts.get::<Option<u32>>("gid")?;
         Ok(GroupModDef { name, system, gid })
     }
 }

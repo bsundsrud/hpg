@@ -33,7 +33,7 @@ pub(crate) fn gid_for_value(val: &mlua::Value) -> Result<Gid, mlua::Error> {
 
         mlua::Value::String(s) => {
             let name = s.to_str()?;
-            let group = Group::from_name(name)
+            let group = Group::from_name(&name)
                 .map_err(|e| error::action_error(format!("group: {}", e)))?
                 .ok_or_else(|| error::action_error(format!("gid for {} not found", name)))?;
             Ok(group.gid)
@@ -55,7 +55,7 @@ pub(crate) fn uid_for_value(val: &mlua::Value) -> Result<Uid, mlua::Error> {
 
         mlua::Value::String(s) => {
             let name = s.to_str()?;
-            let user = User::from_name(name)
+            let user = User::from_name(&name)
                 .map_err(|e| error::action_error(format!("user: {}", e)))?
                 .ok_or_else(|| error::action_error(format!("uid for {} not found", name)))?;
             Ok(user.uid)
@@ -96,7 +96,7 @@ pub(crate) fn run_chown_recursive(
     Ok(())
 }
 
-pub(crate) fn lua_table_to_json(tbl: Table<'_>) -> Result<Value, TaskError> {
+pub(crate) fn lua_table_to_json(tbl: Table) -> Result<Value, TaskError> {
     use mlua::Value as LuaValue;
     use serde_json::Value as JsonValue;
 
@@ -115,22 +115,20 @@ pub(crate) fn lua_table_to_json(tbl: Table<'_>) -> Result<Value, TaskError> {
                     continue;
                 }
             }
-            LuaValue::String(s) => JsonValue::String(s.to_str()?.into()),
+            LuaValue::String(s) => JsonValue::String(s.to_string_lossy()),
             LuaValue::Table(t) => lua_table_to_json(t)?,
             LuaValue::Function(_) => continue,
             LuaValue::Thread(_) => continue,
             LuaValue::UserData(_) => continue,
             LuaValue::Error(_) => continue,
+            LuaValue::Other(_value_ref) => continue,
         };
         map.insert(k, json_value);
     }
     Ok(Value::Object(map))
 }
 
-pub(crate) fn json_to_lua_value<'lua>(
-    ctx: &'lua Lua,
-    json: &Value,
-) -> Result<mlua::Value<'lua>, mlua::Error> {
+pub(crate) fn json_to_lua_value(ctx: &Lua, json: &Value) -> Result<mlua::Value, mlua::Error> {
     use mlua::Value as LuaValue;
 
     let val = match json {

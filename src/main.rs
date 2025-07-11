@@ -5,7 +5,6 @@ use clap::Parser;
 use clap::Subcommand;
 use console::style;
 use error::HpgError;
-use error::HpgRemoteError;
 
 use remote::config::InventoryConfig;
 use remote::ssh::HostInfo;
@@ -40,14 +39,14 @@ pub fn load_file(fname: &str) -> Result<String, HpgError> {
     Ok(s)
 }
 
-fn parse_variable(s: &str) -> Result<(String, String)> {
+fn parse_variable(s: &str) -> Result<(String, String), String> {
     let (k, v) = s
         .split_once('=')
-        .ok_or_else(|| HpgError::Parse("Invalid Variable: Missing '='".to_string()))?;
+        .ok_or_else(|| "Invalid Variable: Missing '='".to_string())?;
     Ok((k.to_string(), v.to_string()))
 }
 
-fn try_parse_host(host_str: &str) -> Result<HostInfo> {
+fn try_parse_host(host_str: &str) -> Result<HostInfo, String> {
     let (user, rest) = if let Some((u, rest)) = host_str.split_once('@') {
         (Some(u.to_string()), rest)
     } else {
@@ -55,10 +54,10 @@ fn try_parse_host(host_str: &str) -> Result<HostInfo> {
     };
 
     let (hostname, port) = if let Some((h, p)) = rest.split_once(':') {
-        let port = Some(p.parse::<u16>().map_err(|_e| HpgRemoteError::ParseHost {
-            orig: host_str.to_string(),
-            reason: "Could not parse port".into(),
-        })?);
+        let port = Some(
+            p.parse::<u16>()
+                .map_err(|e| format!("Could not parse port: {e}"))?,
+        );
         (h.into(), port)
     } else {
         (rest.into(), None)

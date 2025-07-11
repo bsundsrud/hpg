@@ -4,7 +4,7 @@ use crate::error::TaskError;
 use mlua::UserData;
 use serde::Deserialize;
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, Type};
-use zbus::{blocking::Connection, dbus_proxy};
+use zbus::{blocking::Connection, proxy};
 
 type Result<T, E = TaskError> = core::result::Result<T, E>;
 
@@ -21,7 +21,7 @@ pub struct UnitChange {
     pub changes: Vec<UnitChangeInfo>,
 }
 
-#[dbus_proxy(
+#[proxy(
     interface = "org.freedesktop.systemd1.Manager",
     default_service = "org.freedesktop.systemd1",
     default_path = "/org/freedesktop/systemd1"
@@ -86,7 +86,7 @@ trait Systemd {
 
     /// Called when a job is dequeued (when it finishes).
     /// `result` is one of "done", "canceled", "timeout", "failed", "dependency", or "skipped"
-    #[dbus_proxy(signal)]
+    #[zbus(signal)]
     fn job_removed(
         &self,
         id: u32,
@@ -95,10 +95,10 @@ trait Systemd {
         result: &str,
     ) -> zbus::Result<()>;
 
-    #[dbus_proxy(signal)]
+    #[zbus(signal)]
     fn unit_new(&self, id: u32, unit: ObjectPath<'_>) -> zbus::Result<()>;
 
-    #[dbus_proxy(signal)]
+    #[zbus(signal)]
     fn unit_removed(&self, id: u32, unit: ObjectPath<'_>) -> zbus::Result<()>;
 }
 
@@ -126,7 +126,7 @@ impl JobResult {
 }
 
 impl UserData for JobResult {
-    fn add_methods<'lua, T: mlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
+    fn add_methods<T: mlua::UserDataMethods<Self>>(methods: &mut T) {
         methods.add_method("failed", |_, &this, _: ()| Ok(this != JobResult::Done));
 
         methods.add_method("successful", |_, &this, _: ()| Ok(this == JobResult::Done));

@@ -99,7 +99,7 @@ impl HpgArchive {
 }
 
 impl UserData for HpgArchive {
-    fn add_methods<'lua, T: mlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
+    fn add_methods<T: mlua::UserDataMethods<Self>>(methods: &mut T) {
         methods.add_method("extract", |_ctx, this, dst: String| {
             let dst = Path::new(".").join(dst);
             output!(
@@ -151,9 +151,9 @@ pub fn archive(lua: &Lua) -> Result<(), TaskError> {
         } else {
             ctx.create_table()?
         };
-        let ty = opts.get::<_, Option<String>>("type")?;
+        let ty = opts.get::<Option<String>>("type")?;
         let ty_ref = ty.as_deref();
-        let compression = opts.get::<_, Option<String>>("compression")?;
+        let compression = opts.get::<Option<String>>("compression")?;
         let comp_ref = compression.as_deref();
         let src = Path::new(".").join(&path);
         let archive_ty = match (ty_ref, comp_ref) {

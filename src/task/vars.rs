@@ -51,12 +51,12 @@ impl Variables {
         &self,
         ctx: &'lua Lua,
         key: &str,
-    ) -> Result<Option<mlua::Value<'lua>>, mlua::Error> {
+    ) -> Result<Option<mlua::Value>, mlua::Error> {
         let val: Option<mlua::Value> = ctx.named_registry_value(key)?;
         Ok(val)
     }
 
-    pub fn get<'lua>(&self, ctx: &'lua Lua, key: &str) -> Result<mlua::Value<'lua>, mlua::Error> {
+    pub fn get(&self, ctx: &Lua, key: &str) -> Result<mlua::Value, mlua::Error> {
         let val = if let Some(v) = self.get_from_raw(key)? {
             util::json_to_lua_value(ctx, v)?
         } else if let Some(v) = self.get_from_registry(ctx, key)? {
@@ -110,7 +110,7 @@ fn merge_objects(
 }
 
 impl UserData for Variables {
-    fn add_methods<'lua, M: mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
+    fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method(MetaMethod::Index, |ctx, this, idx: String| {
             let v = this.get(ctx, &idx)?;
             Ok(v)

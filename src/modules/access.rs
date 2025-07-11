@@ -24,7 +24,7 @@ impl UserDef {
         }
     }
 
-    fn to_lua<'lua>(&self, ctx: &'lua Lua) -> Result<Table<'lua>, mlua::Error> {
+    fn to_lua<'lua>(&self, ctx: &'lua Lua) -> Result<Table, mlua::Error> {
         let tbl = ctx.create_table()?;
         tbl.set("name", self.name.clone())?;
         tbl.set("uid", self.uid)?;

@@ -61,7 +61,7 @@ pub enum HpgRemoteError {
     #[error("Missing Identity: {0}")]
     MissingKeyError(String),
     #[error("Key Error: {0}")]
-    KeyError(#[from] russh_keys::Error),
+    KeyError(#[from] russh::keys::Error),
     #[error("Could not parse SSH config: {0}")]
     ParseConfig(#[from] russh_config::Error),
     #[error("Could not parse SSH host address '{orig}': {reason}")]

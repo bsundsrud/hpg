@@ -29,7 +29,7 @@ impl HpgFile {
 }
 
 impl UserData for HpgFile {
-    fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
+    fn add_fields<F: mlua::UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("path", |_, this| {
             Ok(this.path.to_string_lossy().to_string())
         });
@@ -39,7 +39,7 @@ impl UserData for HpgFile {
         });
     }
 
-    fn add_methods<'lua, T: mlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
+    fn add_methods<T: mlua::UserDataMethods<Self>>(methods: &mut T) {
         methods.add_meta_method(MetaMethod::ToString, |_, this, _: ()| {
             Ok(this.path.to_string_lossy().to_string())
         });
@@ -189,8 +189,8 @@ impl UserData for HpgFile {
 
         methods.add_method("append", |_, this, opts: Table| {
             output!("append to {}", &this.path.to_string_lossy());
-            let src = opts.get::<_, Option<String>>("src")?;
-            let contents = opts.get::<_, Option<String>>("contents")?;
+            let src = opts.get::<Option<String>>("src")?;
+            let contents = opts.get::<Option<String>>("contents")?;
             let input = match (src, contents) {
                 (None, None) => {
                     return Err(error::action_error(
@@ -209,7 +209,7 @@ impl UserData for HpgFile {
                 }
             };
             let marker = opts
-                .get::<_, Option<String>>("marker")?
+                .get::<Option<String>>("marker")?
                 .ok_or_else(|| error::action_error("append: 'marker' is required"))?;
             let content_hash = hash::content_hash(input.as_bytes());
             let updated = append_to_existing(&this.path, &marker, &input, &content_hash)?;
@@ -217,8 +217,8 @@ impl UserData for HpgFile {
         });
 
         methods.add_method("append_template", |ctx, this, opts: Table| {
-            let src = opts.get::<_, Option<String>>("src")?;
-            let contents = opts.get::<_, Option<String>>("contents")?;
+            let src = opts.get::<Option<String>>("src")?;
+            let contents = opts.get::<Option<String>>("contents")?;
             output!("append template to {}", &this.path.to_string_lossy());
 
             let input = match (src, contents) {
@@ -239,9 +239,9 @@ impl UserData for HpgFile {
                 }
             };
             let marker = opts
-                .get::<_, Option<String>>("marker")?
+                .get::<Option<String>>("marker")?
                 .ok_or_else(|| error::action_error("append: 'marker' is required"))?;
-            let template_context = opts.get::<_, Option<Table>>("context")?;
+            let template_context = opts.get::<Option<Table>>("context")?;
             let template_context = if let Some(c) = template_context {
                 c
             } else {
@@ -261,7 +261,7 @@ impl UserData for HpgFile {
         methods.add_meta_method(MetaMethod::Concat, |ctx, this, other: Value| {
             let globals = ctx.globals();
             let tostring: Function = globals.get("tostring")?;
-            let s = tostring.call::<_, String>(other)?;
+            let s = tostring.call::<String>(other)?;
             let mut joined = this.path.to_string_lossy().to_string();
             joined.push_str(&s);
             Ok(joined)
@@ -276,7 +276,7 @@ impl HpgDir {
 }
 
 impl UserData for HpgDir {
-    fn add_fields<'lua, F: mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
+    fn add_fields<F: mlua::UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("path", |_, this| {
             Ok(this.path.to_string_lossy().to_string())
         });
@@ -286,7 +286,7 @@ impl UserData for HpgDir {
         });
     }
 
-    fn add_methods<'lua, T: mlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
+    fn add_methods<T: mlua::UserDataMethods<Self>>(methods: &mut T) {
         methods.add_method("exists", |_, this, _: ()| {
             let exists = this.path.exists();
 
@@ -379,7 +379,7 @@ impl UserData for HpgDir {
         methods.add_meta_method(MetaMethod::Concat, |ctx, this, other: Value| {
             let globals = ctx.globals();
             let tostring: Function = globals.get("tostring")?;
-            let s = tostring.call::<_, String>(other)?;
+            let s = tostring.call::<String>(other)?;
             let mut joined = this.path.to_string_lossy().to_string();
             joined.push_str(&s);
             Ok(joined)

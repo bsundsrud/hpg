@@ -28,9 +28,9 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
         } else {
             let already_updated = ctx
                 .globals()
-                .get::<_, Table>("pkg")?
-                .get::<_, Table>("apt")?
-                .get::<_, bool>("_updated")?;
+                .get::<Table>("pkg")?
+                .get::<Table>("apt")?
+                .get::<bool>("_updated")?;
             !already_updated
         };
         if !do_update {
@@ -40,8 +40,8 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
         let apt = AptManager::new();
         apt.call_update_repos().map_err(error::task_error)?;
         ctx.globals()
-            .get::<_, Table>("pkg")?
-            .get::<_, Table>("apt")?
+            .get::<Table>("pkg")?
+            .get::<Table>("apt")?
             .set("_updated", true)?;
         Ok(do_update)
     })?;
@@ -64,7 +64,7 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
         let res = installed
             .into_iter()
             .map(|i| package_status_to_lua(ctx, &i))
-            .collect::<Result<Vec<Table<'_>>, mlua::Error>>()?;
+            .collect::<Result<Vec<Table>, mlua::Error>>()?;
         Ok(res)
     })?;
     tbl.set("install", install)?;
@@ -77,7 +77,7 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
             .map_err(error::task_error)?
             .into_iter()
             .map(|p| package_status_to_lua(ctx, &p))
-            .collect::<Result<Vec<Table<'_>>, mlua::Error>>()?;
+            .collect::<Result<Vec<Table>, mlua::Error>>()?;
         Ok(packages)
     })?;
     tbl.set("remove", remove)?;
@@ -90,9 +90,9 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
             .collect::<Result<Vec<InstallRequest>, mlua::Error>>()?;
         let already_updated = ctx
             .globals()
-            .get::<_, Table>("pkg")?
-            .get::<_, Table>("apt")?
-            .get::<_, bool>("_updated")?;
+            .get::<Table>("pkg")?
+            .get::<Table>("apt")?
+            .get::<bool>("_updated")?;
         output!(
             "Ensure Packages: {}",
             packages
@@ -121,7 +121,7 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
         let results = statuses
             .into_iter()
             .map(|i| package_status_to_lua(ctx, &i))
-            .collect::<Result<Vec<Table<'_>>, mlua::Error>>()?;
+            .collect::<Result<Vec<Table>, mlua::Error>>()?;
         res_tbl.set("updated", updated)?;
         res_tbl.set("packages", results)?;
 
@@ -134,11 +134,11 @@ fn apt(ctx: &Lua) -> Result<Table, mlua::Error> {
 
 fn get_arch_manager(ctx: &Lua) -> String {
     ctx.globals()
-        .get::<_, Table>("pkg")
+        .get::<Table>("pkg")
         .unwrap()
-        .get::<_, Table>("arch")
+        .get::<Table>("arch")
         .unwrap()
-        .get::<_, String>("package_manager")
+        .get::<String>("package_manager")
         .unwrap()
 }
 
@@ -152,9 +152,9 @@ fn arch(ctx: &Lua) -> Result<Table, mlua::Error> {
         } else {
             let already_updated = ctx
                 .globals()
-                .get::<_, Table>("pkg")?
-                .get::<_, Table>("arch")?
-                .get::<_, bool>("_updated")?;
+                .get::<Table>("pkg")?
+                .get::<Table>("arch")?
+                .get::<bool>("_updated")?;
             !already_updated
         };
         if !do_update {
@@ -165,8 +165,8 @@ fn arch(ctx: &Lua) -> Result<Table, mlua::Error> {
         let pacman = ArchManager::new(get_arch_manager(ctx));
         pacman.call_update_repos().map_err(error::task_error)?;
         ctx.globals()
-            .get::<_, Table>("pkg")?
-            .get::<_, Table>("arch")?
+            .get::<Table>("pkg")?
+            .get::<Table>("arch")?
             .set("_updated", true)?;
         Ok(do_update)
     })?;
@@ -191,7 +191,7 @@ fn arch(ctx: &Lua) -> Result<Table, mlua::Error> {
         let res = installed
             .into_iter()
             .map(|i| package_status_to_lua(ctx, &i))
-            .collect::<Result<Vec<Table<'_>>, mlua::Error>>()?;
+            .collect::<Result<Vec<Table>, mlua::Error>>()?;
         Ok(res)
     })?;
     tbl.set("install", install)?;
@@ -204,7 +204,7 @@ fn arch(ctx: &Lua) -> Result<Table, mlua::Error> {
             .map_err(error::task_error)?
             .into_iter()
             .map(|p| package_status_to_lua(ctx, &p))
-            .collect::<Result<Vec<Table<'_>>, mlua::Error>>()?;
+            .collect::<Result<Vec<Table>, mlua::Error>>()?;
         Ok(packages)
     })?;
     tbl.set("remove", remove)?;
@@ -217,9 +217,9 @@ fn arch(ctx: &Lua) -> Result<Table, mlua::Error> {
             .collect::<Result<Vec<InstallRequest>, mlua::Error>>()?;
         let already_updated = ctx
             .globals()
-            .get::<_, Table>("pkg")?
-            .get::<_, Table>("arch")?
-            .get::<_, bool>("_updated")?;
+            .get::<Table>("pkg")?
+            .get::<Table>("arch")?
+            .get::<bool>("_updated")?;
         output!(
             "Ensure Packages: {}",
             packages
@@ -248,7 +248,7 @@ fn arch(ctx: &Lua) -> Result<Table, mlua::Error> {
         let results = statuses
             .into_iter()
             .map(|i| package_status_to_lua(ctx, &i))
-            .collect::<Result<Vec<Table<'_>>, mlua::Error>>()?;
+            .collect::<Result<Vec<Table>, mlua::Error>>()?;
         res_tbl.set("updated", updated)?;
         res_tbl.set("packages", results)?;
 
@@ -259,10 +259,7 @@ fn arch(ctx: &Lua) -> Result<Table, mlua::Error> {
     Ok(tbl)
 }
 
-fn package_status_to_lua<'lua>(
-    ctx: &'lua Lua,
-    p: &PackageStatus,
-) -> Result<Table<'lua>, mlua::Error> {
+fn package_status_to_lua(ctx: &Lua, p: &PackageStatus) -> Result<Table, mlua::Error> {
     let tbl = ctx.create_table()?;
     tbl.set("name", p.package.as_str())?;
     match &p.status {
@@ -287,8 +284,8 @@ fn value_to_install_request(val: &mlua::Value) -> Result<InstallRequest, mlua::E
             version: None,
         }),
         mlua::Value::Table(t) => {
-            let name = t.get::<_, String>("name")?;
-            let version = t.get::<_, Option<String>>("version")?.map(Version);
+            let name = t.get::<String>("name")?;
+            let version = t.get::<Option<String>>("version")?.map(Version);
 
             Ok(InstallRequest { name, version })
         }

@@ -46,8 +46,8 @@ impl Task {
     }
 }
 
-impl<'lua> FromLua<'lua> for Task {
-    fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> mlua::Result<Self> {
+impl FromLua for Task {
+    fn from_lua(value: Value, _lua: &Lua) -> mlua::Result<Self> {
         match value {
             Value::UserData(ud) => {
                 if ud.is::<Task>() {
@@ -65,11 +65,17 @@ impl<'lua> FromLua<'lua> for Task {
 }
 
 impl UserData for Task {}
+#[derive(Debug, Clone)]
+pub enum IncompleteReason {
+    Skipped,
+    Failed,
+    Cancelled,
+}
 
 #[derive(Debug, Clone)]
 pub enum TaskResult {
     Success,
-    Incomplete(Option<String>),
+    Incomplete(IncompleteReason),
 }
 
 impl TaskResult {
@@ -87,6 +93,13 @@ impl TaskResult {
             TaskResult::Incomplete(_) => true,
         }
     }
+
+    pub fn errored(&self) -> bool {
+        match self {
+            TaskResult::Incomplete(IncompleteReason::Failed) => true,
+            _ => false,
+        }
+    }
 }
 
 impl UserData for TaskResult {}
@@ -96,7 +109,7 @@ fn std_lib() -> mlua::StdLib {
     StdLib::TABLE | StdLib::STRING | StdLib::UTF8 | StdLib::MATH | StdLib::PACKAGE
 }
 
-fn find_tasks(table: Table<'_>, registry: &TaskRegistry) -> Result<(), mlua::Error> {
+fn find_tasks(table: Table, registry: &TaskRegistry) -> Result<(), mlua::Error> {
     for pair in table.pairs() {
         let (name, val): (String, Value) = pair?;
         match val {
@@ -231,7 +244,7 @@ impl LuaState {
                 for t in tasks.iter() {
                     match t {
                         Value::String(s) => {
-                            if let Some(t) = registry.task_for_name(s.to_str().unwrap()) {
+                            if let Some(t) = registry.task_for_name(&s.to_string_lossy()) {
                                 if !targets.contains(&t) {
                                     targets.push(t);
                                 }
@@ -384,7 +397,7 @@ impl EvaluatedLuaState {
             }
             // If a parent hasn't been run, we also need to skip
             if parent_failed {
-                task_results.insert(task, TaskResult::Incomplete(None));
+                task_results.insert(task, TaskResult::Incomplete(IncompleteReason::Skipped));
                 continue;
             }
 
@@ -414,8 +427,7 @@ impl EvaluatedLuaState {
                             output!("{}\n{}", cause, traceback);
                         }
                         tracker::tracker().task_fail();
-                        task_results
-                            .insert(task, TaskResult::Incomplete(Some("Error".to_string())));
+                        task_results.insert(task, TaskResult::Incomplete(IncompleteReason::Failed));
                         break;
                     }
                     Err(e) => return Err(e.into()),

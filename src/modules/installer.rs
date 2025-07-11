@@ -158,7 +158,7 @@ impl HpgInstaller {
 }
 
 impl UserData for HpgInstaller {
-    fn add_methods<'lua, T: mlua::UserDataMethods<'lua, Self>>(methods: &mut T) {
+    fn add_methods<T: mlua::UserDataMethods<Self>>(methods: &mut T) {
         methods.add_method("install", |_, this, _: ()| this.install());
         methods.add_method("is_installed", |_, this, _: ()| Ok(this.hash_matches()));
     }
@@ -167,9 +167,9 @@ impl UserData for HpgInstaller {
 pub fn installer(lua: &Lua) -> Result<(), TaskError> {
     let f = lua.create_function(
         |_, (archive_path, extract_dir, opts): (String, String, Table)| {
-            let url = opts.get::<_, Option<String>>("url")?;
-            let hash = opts.get::<_, Option<String>>("hash")?;
-            let install_dir = opts.get::<_, Option<String>>("install_dir")?;
+            let url = opts.get::<Option<String>>("url")?;
+            let hash = opts.get::<Option<String>>("hash")?;
+            let install_dir = opts.get::<Option<String>>("install_dir")?;
             let extract_dir = Path::new(".").join(extract_dir);
             let archive_path = Path::new(".").join(archive_path);
 
